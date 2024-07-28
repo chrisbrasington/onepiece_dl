@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Define the sync destination and device IP
+syncDestination="remote"
+deviceIp="192.168.0.41"
+
+# Mount the remote directory using sshfs
+sshfs root@$deviceIp:/mnt/onboard $syncDestination
+
+# Check if the sync destination is mounted
+if mountpoint -q $syncDestination; then
+    echo "KOBOeReader is mounted"
+
+    # create onepiece folder in sync destination if it does not exist
+    mkdir -p $syncDestination/onepiece
+
+    # copy all files in the manga_chapters directory to the KOBOeReader
+    # when they do not exist
+    rsync -av --ignore-existing manga_chapters/* $syncDestination/onepiece
+
+    # Unmount the remote directory
+    fusermount -u $syncDestination
+    echo "KOBOeReader is unmounted"
+else
+    echo "Failed to mount KOBOeReader"
+fi
+
+echo "Done"
