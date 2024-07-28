@@ -90,7 +90,7 @@ def main():
     if images:
         output_pdf = os.path.join(OUTPUT_DIR, f"one piece - {chapter}.pdf")
         images_to_pdf(images, output_pdf)
-        print(f"Chapter {chapter_id} downloaded and saved as {output_pdf}")
+        print(f"Chapter {chapter} downloaded and saved as {output_pdf}")
         delete_images(images)
         save_last_chapter(chapter)
     else:
