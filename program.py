@@ -42,35 +42,17 @@ def download_images(chapter):
     return images
 
 def images_to_pdf(image_paths, output_pdf):
-    pdf = FPDF()
+    images = []
     for image_path in image_paths:
-        image = Image.open(image_path)
-        width, height = image.size
+        images.append(Image.open(image_path))
 
-        # Convert pixels to millimeters (1 pixel = 0.264583 mm)
-        width_mm = width * 0.264583
-        height_mm = height * 0.264583
+    converted_images = []
+    # Iterate through the list of images and convert each one to grayscale
+    for image in images:
+        converted_images.append(image.convert("L"))
 
-        # Determine page orientation
-        orientation = 'P' if width_mm < height_mm else 'L'
-        pdf.add_page(orientation=orientation)
-
-        # A4 dimensions in mm
-        a4_width_mm = 210
-        a4_height_mm = 297
-
-        # Calculate image placement to center it on the page
-        if orientation == 'P':
-            x = (a4_width_mm - width_mm) / 2
-            y = (a4_height_mm - height_mm) / 2
-        else:
-            x = (a4_height_mm - width_mm) / 2
-            y = (a4_width_mm - height_mm) / 2
-
-        # Add the image to the PDF
-        pdf.image(image_path, x=x, y=y, w=width_mm, h=height_mm)
-
-    pdf.output(output_pdf, "F")
+    # Save the images as a PDF
+    converted_images[0].save(output_pdf, "PDF", resolution=100.0, save_all=True, append_images=converted_images[1:])
 
 def delete_images(image_paths):
     for image_path in image_paths:
