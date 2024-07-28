@@ -27,7 +27,7 @@ pip install -r requirements.txt
 Run the script with an optional chapter number argument:
 
 ```bash
-python manga_downloader.py [chapter_number]
+python program.py [chapter_number]
 ```
 
 If no chapter number is provided, the script will continue from the last downloaded chapter.
