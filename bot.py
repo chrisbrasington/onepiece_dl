@@ -9,7 +9,7 @@ class MangaBotClient(discord.Client):
         intents = discord.Intents.default()
         super().__init__(intents=intents)
         self.synced = False
-        self.tree = app_commands.CommandTree(self)
+        # self.tree = 
         self.downloader = MangaDownloader()
 
     async def on_ready(self):
@@ -18,17 +18,19 @@ class MangaBotClient(discord.Client):
         guild = discord.Object(id=guild_id) if guild_id else None
 
         if not self.synced:
-            # Sync commands to the specified guild (or globally)
+            print('Syncing commands...')
+            print(tree)
+            print(guild)
             if guild:
-                await self.tree.sync(guild=guild)
+                await tree.sync(guild=guild)
+                await tree.sync(guild=None)
                 print(f'Synced commands to guild ID: {guild_id}')
             else:
-                await self.tree.sync()
+                await tree.sync()
                 print('Synced commands globally')
             self.synced = True
 
-        # Fetch and print commands
-        commands = await self.tree.fetch_commands(guild=guild)
+        commands = await tree.fetch_commands(guild=guild)
         for command in commands:
             print(f'Command: {command.name}')
 
@@ -38,29 +40,30 @@ class MangaBotClient(discord.Client):
         await super().close()
         print('Bot is shutting down')
 
-client = MangaBotClient()
+bot = MangaBotClient()
+tree = app_commands.CommandTree(bot)
 
-@client.tree.command(name="check", description="Check the latest chapter of One Piece")
+
+@tree.command(name="check", description="Check the latest chapter of One Piece")
 async def check_latest_chapter(interaction: discord.Interaction):
-    latest_chapter = client.downloader.get_latest_chapter()  # Assuming get_latest_chapter is implemented
+    latest_chapter = bot.downloader.get_latest_chapter()
     if latest_chapter:
         await interaction.response.send_message(f'The latest chapter of One Piece is Chapter {latest_chapter}.')
     else:
         await interaction.response.send_message('Could not retrieve the latest chapter.')
 
-@client.tree.command(name="chapter", description="Download a specific chapter of One Piece")
+@tree.command(name="chapter", description="Download a specific chapter of One Piece")
 @app_commands.describe(chapter="The chapter number to download")
 async def download_chapter(interaction: discord.Interaction, chapter: int):
     await interaction.response.send_message(f'Downloading Chapter {chapter} of One Piece...')
     try:
-        client.downloader.download_chapter(chapter)  # Assuming download_chapter is implemented
+        bot.downloader.download_chapter(chapter)
         await interaction.followup.send(f'Chapter {chapter} downloaded successfully.')
     except Exception as e:
         await interaction.followup.send(f'Failed to download Chapter {chapter}. Error: {str(e)}')
 
 # Run the bot with your token
-# Read the token from the file
 with open("bot_token.txt", "r") as f:
-    token = f.read().strip()  # Ensure there are no extra newline characters
+    token = f.read().strip()
 
-client.run(token)
+bot.run(token)
