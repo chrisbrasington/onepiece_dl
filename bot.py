@@ -58,7 +58,10 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
         await interaction.response.send_message(f'Checking Chapter {chapter} of One Piece...')
         path = bot.downloader.download_chapter(chapter, False)
         url = bot.downloader.get_url(chapter)
+        manga_title = bot.downloader.download_and_get_title(url)
         images = bot.downloader.find_cdn_images(url)
+
+        manga_title = f'{chapter}: {manga_title}'
 
         print(images)
 
@@ -78,11 +81,11 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             # Upload file, send as followup, use filename and file object as a PDF
             file_name = path.split("/")[-1]
             with open(path, "rb") as f:
-                await interaction.followup.send(f'Chapter {chapter} available at {url}', file=discord.File(f, file_name))
+                await interaction.followup.send(f'# {manga_title}\nChapter {chapter} available at {url}', file=discord.File(f, file_name))
 
                 # Respond with all images in as few interactions as possible
                 for i in range(0, len(images), 10):
-                    title = f'Chapter {chapter} Images {i+1}-{min(i+10, len(images))}'
+                    title = f'# {manga_title}\n{i+1}-{min(i+10, len(images))}'
                     # print uploading..
                     print(f'Uploading {title}...')
                     await interaction.followup.send(title, files=[discord.File(img) for img in images[i:i+10]])

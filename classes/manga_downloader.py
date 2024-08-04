@@ -61,6 +61,7 @@ class MangaDownloader:
             # remove any potential ? query string from end of url
             cdn_image_links = [re.sub(r'\?.*', '', img) for img in cdn_image_links]
             
+            title = self.get_title(soup)
 
             return cdn_image_links
 
@@ -131,7 +132,7 @@ class MangaDownloader:
             return output_pdf
         else:
             print(f"No images found for chapter {chapter}. It might not be released yet.")
-            return None
+            return None, chapter
 
     def delete_images(self):
         # delete any image files from manga_chapters folder
@@ -145,3 +146,24 @@ class MangaDownloader:
 
     def file_exists(self, file):
         return os.path.exists(file)
+
+    def get_title(self, soup):
+        # Find the <p> tag with the specific class
+        p_tag = soup.find('p', class_='text-center text-text-muted font-bold mt-2')
+        
+        # Extract the text content
+        if p_tag:
+            return p_tag.get_text(strip=True)
+        return soup.title.string
+        
+    def download_and_get_title(self, url):
+        # Download the page content
+        response = requests.get(url)
+        response.raise_for_status()
+
+        # Parse the page with BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        print(self.get_title(soup))
+
+        return self.get_title(soup)
