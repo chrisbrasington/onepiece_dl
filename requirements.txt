@@ -2,3 +2,4 @@ requests
 Pillow
 fpdf
 beautifulsoup4
+discord
