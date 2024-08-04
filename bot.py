@@ -52,7 +52,7 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
         if chapter is None:
             # Handle checking the latest chapter (if required, implement the logic here)
             # Insert logic to check the latest chapter here
-            chapter = bot.downloader.get_last_chapter()
+            chapter = bot.downloader.get_last_chapter()+1
 
         # Handle downloading a specific chapter
         await interaction.response.send_message(f'Checking Chapter {chapter} of One Piece...')
@@ -94,7 +94,9 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             bot.downloader.delete_images()
 
     except Exception as e:
-        await interaction.followup.send(f'Failed to process Chapter {chapter}. Error: {str(e)}')
+        # tell user chapter may not yet be released, check back next Sunday
+        await interaction.followup.send('Chapter may not yet be released, check back next Sunday')
+        
 
 @tree.command(name="check", description="Check the latest chapter of One Piece")
 async def check_latest_chapter(interaction: discord.Interaction):
