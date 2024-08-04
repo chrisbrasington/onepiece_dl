@@ -4,3 +4,4 @@ archive
 *.log
 *.txt
 remote
+.venv

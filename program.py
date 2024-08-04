@@ -4,6 +4,8 @@ import sys
 import requests
 from PIL import Image
 from fpdf import FPDF
+from bs4 import BeautifulSoup
+import re
 
 # Constants
 BASE_URL = "https://cdn.readonepiece.com/file/mangap/2"
@@ -22,24 +24,64 @@ def get_last_chapter():
     return None
 
 def save_last_chapter(chapter):
-    with open(LAST_CHAPTER_FILE, "w") as f:
-        f.write(str(chapter))
+
+    last_chapter = get_last_chapter()
+
+    if(chapter > last_chapter):
+        print(f"Saving last chapter as {chapter}...")
+        with open(LAST_CHAPTER_FILE, "w") as f:
+            f.write(str(chapter))
+    else:
+        print(f"Keeping chapter already saved as {last_chapter}...")
+
+def find_cdn_images(url):
+    try:
+        # Download the page content
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+
+        # Parse the page with BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Find all the links that match the pattern
+        cdn_image_links = []
+        pattern = re.compile(r'https://cdn.*\.(png|jpeg)')
+
+        for img in soup.find_all('img', src=True):
+            img_src = img['src'].replace('\r', '')
+            if pattern.match(img_src):
+                cdn_image_links.append(img_src)
+
+        return cdn_image_links
+    
+    except requests.RequestException as e:
+        print(f"Error downloading the page: {e}")
+        return []
 
 def download_images(chapter):
-    page = 1
-    images = []
-    while True:
-        image_url = f"{BASE_URL}/{chapter}/{page}{IMAGE_EXTENSION}"
-        print(image_url)
+
+    url = f'https://ww10.readonepiece.com/chapter/one-piece-chapter-{chapter}/'
+    images = find_cdn_images(url)
+
+    imagesOnDisk = []
+
+    for(i, image_url) in enumerate(images):
+        # skip title or translator cover images
+        # not reliable enough atm
+        # if(image_url.endswith('01.png') or image_url.endswith('01.jpeg')):
+        #     print(f"Skipping image {i+1}... {image_url}")
+        #     continue;
+
+        print(f"Downloading image {i+1}... {image_url}")
         response = requests.get(image_url)
         if response.status_code == 404:
             break
-        image_path = os.path.join(OUTPUT_DIR, f"{chapter}_{page}{IMAGE_EXTENSION}")
+        image_path = os.path.join(OUTPUT_DIR, f"{chapter}_{i+1}{IMAGE_EXTENSION}")
         with open(image_path, "wb") as f:
             f.write(response.content)
-        images.append(image_path)
-        page += 1
-    return images
+        imagesOnDisk.append(image_path)
+
+    return imagesOnDisk
 
 def images_to_pdf(image_paths, output_pdf):
     images = []
@@ -65,10 +107,9 @@ def main():
         last_chapter = get_last_chapter()
         chapter = last_chapter + 1 if last_chapter else 1
 
-    chapter_id = f"1{chapter}000"
     print(f"Downloading chapter {chapter}...")
 
-    images = download_images(chapter_id)
+    images = download_images(chapter)
     if images:
         output_pdf = os.path.join(OUTPUT_DIR, f"one piece - {chapter}.pdf")
         images_to_pdf(images, output_pdf)
