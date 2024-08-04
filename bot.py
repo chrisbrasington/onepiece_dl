@@ -10,7 +10,7 @@ class MangaBotClient(discord.Client):
         intents = discord.Intents.default() # all?
         super().__init__(intents=intents)
         self.synced = False
-        # self.downloader = MangaDownloader()
+        self.downloader = MangaDownloader()
 
     async def on_ready(self):
         print(f'Logged in as {self.user.name}')
@@ -26,10 +26,10 @@ class MangaBotClient(discord.Client):
 
             print(f'Syncing commands to {guild.name}...')
 
-            await tree.sync(guild=guild)
-            # await tree.sync(guild=None)
+            # await tree.sync(guild=guild)
+            await tree.sync()  # For global sync
 
-            commands = await tree.fetch_commands(guild=guild)
+            commands = await tree.fetch_commands()
 
             for command in commands:
                 print(f'Command: {command.name}')
@@ -49,11 +49,12 @@ tree = app_commands.CommandTree(bot)
 
 @tree.command(name="check", description="Check the latest chapter of One Piece")
 async def check_latest_chapter(interaction: discord.Interaction):
-    latest_chapter = bot.downloader.get_latest_chapter()
-    if latest_chapter:
-        await interaction.response.send_message(f'The latest chapter of One Piece is Chapter {latest_chapter}.')
-    else:
-        await interaction.response.send_message('Could not retrieve the latest chapter.')
+    await interaction.response.send_message('Checking the latest chapter of One Piece...')
+    try:
+        bot.downloader.download_chapter()
+        await interaction.followup.send('Latest chapter checked successfully.')
+    except Exception as e:
+        await interaction.followup.send(f'Failed to check the latest chapter. Error: {str(e)}')
 
 @tree.command(name="chapter", description="Download a specific chapter of One Piece")
 @app_commands.describe(chapter="The chapter number to download")
@@ -68,7 +69,5 @@ async def download_chapter(interaction: discord.Interaction, chapter: int):
 # Run the bot with your token
 with open("bot_token.txt", "r") as f:
     token = f.read().strip()
-
-
 
 bot.run(token)
