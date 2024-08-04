@@ -1,40 +1,44 @@
 #!/usr/bin/env python3
 import discord
 from discord import app_commands
-from discord.ext import commands
 from classes.manga_downloader import MangaDownloader
+import json
 
+# Configure Discord bot
 class MangaBotClient(discord.Client):
     def __init__(self):
-        intents = discord.Intents.default()
+        intents = discord.Intents.default() # all?
         super().__init__(intents=intents)
         self.synced = False
-        # self.tree = 
-        self.downloader = MangaDownloader()
+        # self.downloader = MangaDownloader()
 
     async def on_ready(self):
         print(f'Logged in as {self.user.name}')
-        guild_id = '1048782527357272177'  # Replace with your guild ID
-        guild = discord.Object(id=guild_id) if guild_id else None
 
+        await self.wait_until_ready()
         if not self.synced:
-            print('Syncing commands...')
-            print(tree)
-            print(guild)
-            if guild:
-                await tree.sync(guild=guild)
-                await tree.sync(guild=None)
-                print(f'Synced commands to guild ID: {guild_id}')
-            else:
-                await tree.sync()
-                print('Synced commands globally')
-            self.synced = True
 
-        commands = await tree.fetch_commands(guild=guild)
-        for command in commands:
-            print(f'Command: {command.name}')
+            # get config from config.json
+            with open("config.json", "r") as f:
+                config = json.load(f)
 
-        print('Bot is ready')
+            guild = self.get_guild(config['guild_id'])
+
+            print(f'Syncing commands to {guild.name}...')
+
+            await tree.sync(guild=guild)
+            # await tree.sync(guild=None)
+
+            commands = await tree.fetch_commands(guild=guild)
+
+            for command in commands:
+                print(f'Command: {command.name}')
+
+            # if no commands
+            if not commands:
+                print('No commands found.')
+
+            print('Ready')
 
     async def close(self):
         await super().close()
@@ -42,7 +46,6 @@ class MangaBotClient(discord.Client):
 
 bot = MangaBotClient()
 tree = app_commands.CommandTree(bot)
-
 
 @tree.command(name="check", description="Check the latest chapter of One Piece")
 async def check_latest_chapter(interaction: discord.Interaction):
@@ -65,5 +68,7 @@ async def download_chapter(interaction: discord.Interaction, chapter: int):
 # Run the bot with your token
 with open("bot_token.txt", "r") as f:
     token = f.read().strip()
+
+
 
 bot.run(token)

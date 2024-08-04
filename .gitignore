@@ -6,3 +6,4 @@ archive
 remote
 .venv
 bot_token.txt
+config.json
