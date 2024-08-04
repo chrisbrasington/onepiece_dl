@@ -143,4 +143,5 @@ class MangaDownloader:
                 # delete the file
                 os.remove(os.path.join(self.OUTPUT_DIR, file))
 
-        
+    def file_exists(self, file):
+        return os.path.exists(file)
