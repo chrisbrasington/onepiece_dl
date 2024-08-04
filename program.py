@@ -88,6 +88,8 @@ def images_to_pdf(image_paths, output_pdf):
     for image_path in image_paths:
         images.append(Image.open(image_path))
 
+    # remove this if you want to keep the images in color
+    # converted_images = images
     converted_images = []
     # Iterate through the list of images and convert each one to grayscale
     for image in images:
