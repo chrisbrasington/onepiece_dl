@@ -51,8 +51,21 @@ tree = app_commands.CommandTree(bot)
 async def check_latest_chapter(interaction: discord.Interaction):
     await interaction.response.send_message('Checking the latest chapter of One Piece...')
     try:
-        bot.downloader.download_chapter()
-        await interaction.followup.send('Latest chapter checked successfully.')
+        path = bot.downloader.download_chapter()
+
+        url = bot.downloader.get_url(None)
+        chapter_number = bot.downloader.get_last_chapter() 
+
+        await interaction.followup.send(f'Latest chapter is available at {url}')
+
+        print(path)
+
+        # upload file, send as followup, use filename and file object is a pdf
+        # get filename from path
+        file_name = path.split("/")[-1]
+        with open(path, "rb") as f:
+            await interaction.followup.send(file=discord.File(f, file_name))
+
     except Exception as e:
         await interaction.followup.send(f'Failed to check the latest chapter. Error: {str(e)}')
 
@@ -61,8 +74,41 @@ async def check_latest_chapter(interaction: discord.Interaction):
 async def download_chapter(interaction: discord.Interaction, chapter: int):
     await interaction.response.send_message(f'Downloading Chapter {chapter} of One Piece...')
     try:
-        bot.downloader.download_chapter(chapter)
-        await interaction.followup.send(f'Chapter {chapter} downloaded successfully.')
+        path = bot.downloader.download_chapter(chapter, False)
+        url = bot.downloader.get_url(chapter)
+        images = bot.downloader.find_cdn_images(url)
+
+        print(images)
+
+        # convert CDN images to file objects
+        #  images will exist in manga_chapters like "1121_01.jpeg"
+        #  images are named by chapter number and image number, so file name has to be modified to this format
+        #  use file extension to determine if image is a jpeg or png
+        # remove any query string ? from end of url
+        images = [f"manga_chapters/{chapter}_{i+1}{'.jpeg' if image.endswith('jpeg') else '.png'}" for i, image in enumerate(images)]
+
+        print(images)
+
+        success = path is not None
+
+        if success:
+            # upload file, send as followup, use filename and file object is a pdf
+            # get filename from path
+            file_name = path.split("/")[-1]
+            with open(path, "rb") as f:
+                await interaction.followup.send(f'Chapter {chapter} available at {url}', file=discord.File(f, file_name))
+
+                # respond with all image in as few interactions as possible
+                #   limit 10 images per interaction
+                #   send all images in one interaction if less than 10
+                #   send all images in multiple interactions if more than 10
+                for i in range(0, len(images), 10):
+                    title = f'Chapter {chapter} Images {i+1}-{min(i+10, len(images))}'
+                    await interaction.followup.send(title, files=[discord.File(img) for img in images[i:i+10]])
+
+        # delete images if downloaded
+        bot.downloader.delete_images()
+
     except Exception as e:
         await interaction.followup.send(f'Failed to download Chapter {chapter}. Error: {str(e)}')
 

@@ -16,6 +16,15 @@ class MangaDownloader:
         if not os.path.exists(self.OUTPUT_DIR):
             os.makedirs(self.OUTPUT_DIR)
 
+    def get_url(self, chapter):
+
+        if(chapter is None):
+            # load from file
+            with open(self.LAST_CHAPTER_FILE, "r") as f:
+                chapter = int(f.read().strip())
+
+        return f'https://ww10.readonepiece.com/chapter/one-piece-chapter-{chapter}/'
+
     def get_last_chapter(self):
         if os.path.exists(self.LAST_CHAPTER_FILE):
             with open(self.LAST_CHAPTER_FILE, "r") as f:
@@ -48,6 +57,10 @@ class MangaDownloader:
                 img_src = img['src'].replace('\r', '')
                 if pattern.match(img_src):
                     cdn_image_links.append(img_src)
+
+            # remove any potential ? query string from end of url
+            cdn_image_links = [re.sub(r'\?.*', '', img) for img in cdn_image_links]
+            
 
             return cdn_image_links
 
@@ -99,7 +112,7 @@ class MangaDownloader:
         for image_path in image_paths:
             os.remove(image_path)
 
-    def download_chapter(self, chapter=None):
+    def download_chapter(self, chapter=None, delete_images=True):
         if chapter is None:
             last_chapter = self.get_last_chapter()
             chapter = last_chapter + 1 if last_chapter else 1
@@ -111,7 +124,23 @@ class MangaDownloader:
             output_pdf = os.path.join(self.OUTPUT_DIR, f"one piece - {chapter}.pdf")
             self.images_to_pdf(images, output_pdf)
             print(f"Chapter {chapter} downloaded and saved as {output_pdf}")
-            self.delete_images(images)
+            if delete_images:
+                self.delete_images(images)
             self.save_last_chapter(chapter)
+
+            return output_pdf
         else:
             print(f"No images found for chapter {chapter}. It might not be released yet.")
+            return None
+
+    def delete_images(self):
+        # delete any image files from manga_chapters folder
+
+        # for each file in the manga_chapters folder
+        for file in os.listdir("manga_chapters"):
+            # if the file is an image
+            if file.endswith(self.IMAGE_EXTENSION):
+                # delete the file
+                os.remove(os.path.join(self.OUTPUT_DIR, file))
+
+        
