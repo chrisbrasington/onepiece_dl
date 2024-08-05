@@ -7,3 +7,9 @@ remote
 .venv
 bot_token.txt
 config.json
+# Ignore Python bytecode files
+*.pyc
+
+# Ignore __pycache__ directories
+__pycache__/
+

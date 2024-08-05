@@ -126,7 +126,7 @@ class MangaDownloader:
             self.images_to_pdf(images, output_pdf)
             print(f"Chapter {chapter} downloaded and saved as {output_pdf}")
             if delete_images:
-                self.delete_images(images)
+                self.delete_images()
             self.save_last_chapter(chapter)
 
             return output_pdf
