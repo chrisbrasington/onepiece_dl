@@ -1,20 +1,20 @@
-# Manga Downloader and Sync Script
 
-## Overview
+# Project Overview
 
-This project consists of two main components:
-1. **Manga Downloader Script**: A Python script that downloads manga chapters from a specified URL, converts the downloaded images into a PDF, and deletes the images afterward.
-2. **Sync Script**: A Bash script that synchronizes the downloaded PDF files to a KOBO eReader device.
+This project consists of three main components:
+1. **Manga Downloader Script**: Downloads manga chapters from a specified URL, converts the images into a PDF, and deletes the images afterward.
+2. **Sync Script**: Synchronizes the downloaded PDF files to a KOBO eReader device.
+3. **Discord Bot**: A Discord bot that allows users to interact with the Manga Downloader script via Discord commands.
 
 ## Manga Downloader Script
 
 ### Description
 
 The Manga Downloader script performs the following tasks:
-1. Downloads incrementing JPEG images from a specified URL until a 404 error is encountered.
-2. Converts the downloaded images into a single PDF file.
+1. Downloads JPEG images from a specified URL until a 404 error is encountered.
+2. Converts the images into a single PDF file.
 3. Deletes the images after the PDF is created.
-4. Stores the last downloaded chapter number on disk for future runs.
+4. Stores the last downloaded chapter number for future runs.
 
 ### Usage
 
@@ -30,45 +30,44 @@ Run the script with an optional chapter number argument:
 python program.py [chapter_number]
 ```
 
-If no chapter number is provided, the script will continue from the last downloaded chapter.
-
 ## Sync Script
 
 ### Description
 
-The Sync script performs the following tasks:
-1. Mounts the KOBO eReader device using `sshfs`.
-2. Creates a directory for the manga on the KOBO eReader if it does not exist.
-3. Synchronizes the downloaded PDF files to the KOBO eReader, ignoring existing files.
-4. Unmounts the KOBO eReader device.
+The Sync Script synchronizes the downloaded PDF files to a KOBO eReader device.
 
 ### Usage
 
 Run the script:
 
 ```bash
-./sync_script.sh
+bash sync.sh
 ```
 
-Ensure the `sync_script.sh` has execution permissions:
+## Discord Bot
+
+### Description
+
+The Discord bot allows users to interact with the Manga Downloader script via Discord commands.
+
+### Usage
+
+Ensure you have the required Python packages installed:
 
 ```bash
-chmod +x sync_script.sh
+pip install -r requirements.txt
 ```
 
-## Requirements
+Run the bot:
 
-### Python Packages
+```bash
+python bot.py
+```
 
-- `requests`
-- `Pillow`
-- `fpdf`
+### Bot Commands
 
-### System Requirements
+The following commands are available for the Discord bot:
 
-- `sshfs`
-- `rsync`
-
-## License
-
-This project is licensed under the MIT License.
+- `/check`: Check the latest chapter of One Piece.
+- `/chapter [chapter]`: Download a specific chapter of One Piece.
+- `/napier [chapter]`: Check if Merphy Napier has a video for a specific One Piece chapter. If no chapter number is provided, it checks the latest chapter.
