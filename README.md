@@ -71,3 +71,4 @@ The following commands are available for the Discord bot:
 - `/check`: Check the latest chapter of One Piece.
 - `/chapter [chapter]`: Download a specific chapter of One Piece.
 - `/napier [chapter]`: Check if Merphy Napier has a video for a specific One Piece chapter. If no chapter number is provided, it checks the latest chapter.
+    - https://www.youtube.com/@merphynapier42/videos
