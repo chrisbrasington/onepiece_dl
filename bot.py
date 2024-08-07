@@ -1,8 +1,42 @@
 #!/usr/bin/env python3
 import discord
 from discord import app_commands
+from googleapiclient.discovery import build
 from classes.manga_downloader import MangaDownloader
 import json
+
+# Function to check if Merphy Napier has a video for the chapter
+def check_one_piece_chapter_video(api_key, chapter_number):
+    # YouTube channel ID for Merphy Napier
+    channel_id = 'UC7FW6FYqPLeQIXMSulBfOLw'
+    
+    # Build the YouTube API client
+    youtube = build('youtube', 'v3', developerKey=api_key)
+    
+
+    # Search for videos in the channel containing the chapter number
+    request = youtube.search().list(
+        part='snippet',
+        channelId=channel_id,
+        q=f"One Piece Chapter {chapter_number}",
+        type='video',
+        maxResults=5
+    )
+    
+    response = request.execute()
+
+    # print(response)
+
+    # Check if any video title contains the chapter number
+    for item in response['items']:
+        if f"Chapter {chapter_number}" in item['snippet']['title']:
+            # return f"Found: {item['snippet']['title']} - {item['snippet']['publishedAt']}"
+            video_id = item['id']['videoId']
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
+            return video_url
+    
+    # no video found for chapter
+    return f"No video found yet for chapter {chapter_number}"
 
 # Configure Discord bot
 class MangaBotClient(discord.Client):
@@ -47,56 +81,23 @@ class MangaBotClient(discord.Client):
 bot = MangaBotClient()
 tree = app_commands.CommandTree(bot)
 
-async def handle_chapter_request(interaction: discord.Interaction, chapter: int = None):
-    try:
-        if chapter is None:
-            # Handle checking the latest chapter (if required, implement the logic here)
-            # Insert logic to check the latest chapter here
-            chapter = bot.downloader.get_last_chapter()+1
+@tree.command(name="napier", description="Check if Merphy Napier has a video for a specific One Piece chapter")
+@app_commands.describe(chapter="The chapter number to check (optional)")
+async def check_napier_video(interaction: discord.Interaction, chapter: int = None):
+    await interaction.response.defer()  # Defer the response to avoid timeouts
 
-        # Handle downloading a specific chapter
-        await interaction.response.send_message(f'Checking Chapter {chapter} of One Piece...')
-        path = bot.downloader.download_chapter(chapter, False)
-        url = bot.downloader.get_url(chapter)
-        manga_title = bot.downloader.download_and_get_title(url)
-        images = bot.downloader.find_cdn_images(url)
+    # Load the YouTube API key from youtube.txt
+    with open("youtube.txt", "r") as f:
+        api_key = f.read().strip()
 
-        manga_title = f'{chapter}: {manga_title}'
+    if chapter is None:
+        # Use the latest chapter number if not provided
+        chapter = bot.downloader.get_last_chapter()
 
-        print(images)
-
-        # Convert CDN images to file objects
-        images = [f"manga_chapters/{chapter}_{i+1}{'.jpeg' if image.endswith('jpeg') else '.png'}" for i, image in enumerate(images)]
-
-        # check if file exists, may accidentally be jpeg or png - or vice versa
-        for i, image in enumerate(images):
-            if not bot.downloader.file_exists(image):
-                images[i] = image.replace('.jpeg', '.png') if image.endswith('.jpeg') else image.replace('.png', '.jpeg')
-
-        print(images)
-
-        success = path is not None
-
-        if success:
-            # Upload file, send as followup, use filename and file object as a PDF
-            file_name = path.split("/")[-1]
-            with open(path, "rb") as f:
-                await interaction.followup.send(f'# {manga_title}\nChapter {chapter} available at {url}', file=discord.File(f, file_name))
-
-                # Respond with all images in as few interactions as possible
-                for i in range(0, len(images), 10):
-                    title = f'# {manga_title}\n{i+1}-{min(i+10, len(images))}'
-                    # print uploading..
-                    print(f'Uploading {title}...')
-                    await interaction.followup.send(title, files=[discord.File(img) for img in images[i:i+10]])
-
-            # Delete images if downloaded
-            bot.downloader.delete_images()
-
-    except Exception as e:
-        # tell user chapter may not yet be released, check back next Sunday
-        await interaction.followup.send('Chapter may not yet be released, check back next Sunday')
-        
+    # Check for the video
+    result = check_one_piece_chapter_video(api_key, chapter)
+    
+    await interaction.followup.send(result)
 
 @tree.command(name="check", description="Check the latest chapter of One Piece")
 async def check_latest_chapter(interaction: discord.Interaction):
@@ -106,7 +107,6 @@ async def check_latest_chapter(interaction: discord.Interaction):
 @app_commands.describe(chapter="The chapter number to download")
 async def download_chapter(interaction: discord.Interaction, chapter: int):
     await handle_chapter_request(interaction, chapter)
-
 
 # Run the bot with your token
 with open("bot_token.txt", "r") as f:
