@@ -120,12 +120,18 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
                 # Respond with all images in as few interactions as possible
                 for i in range(0, len(images), 10):
                     title = f'# {manga_title}\n{i+1}-{min(i+10, len(images))}'
+
+                    title += f'/{len(images)}'
+
                     # print uploading..
                     print(f'Uploading {title}...')
                     await interaction.followup.send(title, files=[discord.File(img) for img in images[i:i+10]])
 
             # Delete images if downloaded
             bot.downloader.delete_images()
+
+            print(f'Chapter {chapter} uploaded successfully')
+            print('Done')
 
     except Exception as e:
         # tell user chapter may not yet be released, check back next Sunday
