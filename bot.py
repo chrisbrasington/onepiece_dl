@@ -164,6 +164,43 @@ async def check_latest_chapter(interaction: discord.Interaction):
 async def download_chapter(interaction: discord.Interaction, chapter: int):
     await handle_chapter_request(interaction, chapter)
 
+@tree.command(name="get", description="Download a manga chapter using a URL parameter")
+@app_commands.describe(url="The URL of the manga chapter to download")
+async def download_chapter_by_url(interaction: discord.Interaction, url: str):
+    await interaction.response.defer()  # Defer the response to avoid timeouts
+    
+    try:
+        # Inform user about the download attempt
+        await interaction.followup.send(f"Attempting to download manga chapter from: {url}")
+
+        # Use MangaDownloader to download chapter and get title
+        manga_title = bot.downloader.download_and_get_title(url)
+        images = bot.downloader.find_cdn_images(url)
+
+        # Check if any images were found
+        if not images:
+            await interaction.followup.send("No images found for the provided URL. It might be invalid or the chapter is not available.")
+            return
+
+        # Generate a PDF and get the path
+        chapter = manga_title.split(':')[0]  # Using the title as chapter identifier if needed
+        path = f"manga_chapters/{manga_title}.pdf"
+        bot.downloader.images_to_pdf(images, path)
+
+        # Upload the PDF file
+        file_name = path.split("/")[-1]
+        with open(path, "rb") as f:
+            await interaction.followup.send(f"Downloaded chapter: {manga_title}\nURL: {url}", file=discord.File(f, file_name))
+
+        # Clean up images after creation
+        bot.downloader.delete_images()
+
+        print(f"Chapter from {url} uploaded successfully")
+
+    except Exception as e:
+        print(f"Error during download: {e}")
+        await interaction.followup.send(f"Failed to download manga chapter from the provided URL. Please check the URL and try again.")
+
 # Run the bot with your token
 with open("bot_token.txt", "r") as f:
     token = f.read().strip()
