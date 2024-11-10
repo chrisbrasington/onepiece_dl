@@ -44,6 +44,7 @@ class MangaDownloader:
 
     def find_cdn_images(self, url):
         try:
+            print(f"Checking images from... {url}")
             # Download the page content
             response = requests.get(url)
             response.raise_for_status()  # Raise an exception for HTTP errors
@@ -65,6 +66,9 @@ class MangaDownloader:
                 img_src = img['src'].replace('\r', '')
                 if any(pattern.match(img_src) for pattern in patterns):
                     cdn_image_links.append(img_src)
+                    print(img_src)
+                # else:
+                #     print(f"Skipping image... {img_src}")
 
             # Remove any potential ? query string from end of URLs
             cdn_image_links = [re.sub(r'\?.*', '', img) for img in cdn_image_links]
@@ -77,10 +81,17 @@ class MangaDownloader:
             print(f"Error downloading the page: {e}")
             return []
 
-    def download_images(self, chapter):
-        url = self.get_url(chapter)
-        print(f"Checking... {url}")
-        images = self.find_cdn_images(url)
+    def download_images(self, chapter, cdn_images = None):
+
+        if cdn_images is not None:
+            print(f"Downloading known images from CDN...")
+            images = cdn_images
+        else:
+            url = self.get_url(chapter)
+            print(f"Checking... {url}")
+            images = self.find_cdn_images(url)
+
+        print(images)
 
         images_on_disk = []
 

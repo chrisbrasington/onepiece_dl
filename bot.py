@@ -3,7 +3,7 @@ import discord
 from discord import app_commands
 from googleapiclient.discovery import build
 from classes.manga_downloader import MangaDownloader
-import json
+import json, re
 
 # Function to check if Merphy Napier has a video for the chapter
 def check_one_piece_chapter_video(api_key, chapter_number):
@@ -173,9 +173,28 @@ async def download_chapter_by_url(interaction: discord.Interaction, url: str):
         # Inform user about the download attempt
         await interaction.followup.send(f"Attempting to download manga chapter from: {url}")
 
+        # find chapter in last subset of url
+        # example 1130 out of https://w13.read-onepiece-manga.com/manga/one-piece-chapter-1130-the-accursed-price/
+        # Example URL
+        url = "https://w13.read-onepiece-manga.com/manga/one-piece-chapter-1130-the-accursed-price/"
+
+        # Regular expression to extract the chapter number
+        match = re.search(r"chapter-(\d+)-", url)
+
+        chapter = None
+
+        if match:
+            chapter = match.group(1)
+            print(f"Chapter number: {chapter}")
+        else:
+            print("Chapter number not found.")
+            # tell user of failure
+            await interaction.followup.send("Chapter number not found in the URL.")
+
         # Use MangaDownloader to download chapter and get title
         manga_title = bot.downloader.download_and_get_title(url)
-        images = bot.downloader.find_cdn_images(url)
+        cdn_images = bot.downloader.find_cdn_images(url)
+        images = bot.downloader.download_images(chapter, cdn_images)
 
         # Check if any images were found
         if not images:
@@ -192,10 +211,21 @@ async def download_chapter_by_url(interaction: discord.Interaction, url: str):
         with open(path, "rb") as f:
             await interaction.followup.send(f"Downloaded chapter: {manga_title}\nURL: {url}", file=discord.File(f, file_name))
 
+        # Respond with all images in as few interactions as possible
+        for i in range(0, len(images), 10):
+            title = f'# {manga_title}\n{i+1}-{min(i+10, len(images))}'
+
+            title += f'/{len(images)}'
+
+            # print uploading..
+            print(f'Uploading {title}...')
+            await interaction.followup.send(title, files=[discord.File(img) for img in images[i:i+10]])
+
         # Clean up images after creation
         bot.downloader.delete_images()
 
         print(f"Chapter from {url} uploaded successfully")
+        print('Done')
 
     except Exception as e:
         print(f"Error during download: {e}")
