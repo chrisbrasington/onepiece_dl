@@ -23,7 +23,9 @@ class MangaDownloader:
             with open(self.LAST_CHAPTER_FILE, "r") as f:
                 chapter = int(f.read().strip())
 
-        return f'https://ww10.readonepiece.com/chapter/one-piece-chapter-{chapter}/'
+        #return f'https://ww10.readonepiece.com/chapter/one-piece-chapter-{chapter}/'
+        # https://w13.read-onepiece-manga.com/
+        return f'https://www.read-onepiece-manga.com/manga/one-piece-chapter-{chapter}/'
 
     def get_last_chapter(self):
         if os.path.exists(self.LAST_CHAPTER_FILE):
@@ -49,16 +51,22 @@ class MangaDownloader:
             # Parse the page with BeautifulSoup
             soup = BeautifulSoup(response.content, 'html.parser')
 
-            # Find all the links that match the pattern
+            # Find all the links that match the patterns
             cdn_image_links = []
-            pattern = re.compile(r'https://cdn.*\.(png|jpeg)')
 
+            # Define patterns for matching the image URLs
+            patterns = [
+                re.compile(r'https://cdn.*\.(png|jpeg)'),
+                re.compile(r'https://.*manga_.*\.jpeg')
+            ]
+
+            # Check each image source against the patterns
             for img in soup.find_all('img', src=True):
                 img_src = img['src'].replace('\r', '')
-                if pattern.match(img_src):
+                if any(pattern.match(img_src) for pattern in patterns):
                     cdn_image_links.append(img_src)
 
-            # remove any potential ? query string from end of url
+            # Remove any potential ? query string from end of URLs
             cdn_image_links = [re.sub(r'\?.*', '', img) for img in cdn_image_links]
             
             title = self.get_title(soup)
@@ -70,7 +78,7 @@ class MangaDownloader:
             return []
 
     def download_images(self, chapter):
-        url = f'https://ww10.readonepiece.com/chapter/one-piece-chapter-{chapter}/'
+        url = self.get_url(chapter)
         print(f"Checking... {url}")
         images = self.find_cdn_images(url)
 
