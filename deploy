@@ -17,3 +17,4 @@ docker run -e TZ=America/Denver --name one-piece-bot --restart always -d one-pie
 # view logs
 echo 'watching logs with...'
 echo 'docker logs -f one-piece-bot'
+
