@@ -89,7 +89,9 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             chapter = bot.downloader.get_last_chapter()+1
 
         # Handle downloading a specific chapter
-        # await interaction.response.send_message(f'Checking Chapter {chapter} of One Piece...')
+        # defer the response as thinking
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
         path = bot.downloader.download_chapter(chapter, False)
         url = bot.downloader.get_url(chapter)
         manga_title = bot.downloader.download_and_get_title(url)
@@ -112,10 +114,12 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
         success = path is not None
 
         if success:
+            await interaction.edit_original_response(content=f'Chapter {chapter} uploading...')
+
             # Upload file, send as followup, use filename and file object as a PDF
             file_name = path.split("/")[-1]
             with open(path, "rb") as f:
-                await interaction.response.send(f'# {manga_title}\nChapter {chapter} available at {url}', file=discord.File(f, file_name))
+                await interaction.followup.send(f'# {manga_title}\nChapter {chapter} available at {url}', file=discord.File(f, file_name))
 
                 # Respond with all images in as few interactions as possible
                 for i in range(0, len(images), 10):
@@ -135,8 +139,16 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
 
     except Exception as e:
 
+        print(f'Error during download: {e}')
+
         # respond via DM that the chaper is not found, give the chapter number
-        await interaction.user.send(f'Chapter {chapter} may not yet be released, check back next Sunday')
+        # await interaction.user.send(f'Chapter {chapter} may not yet be released, check back next Sunday')
+
+        # delete_original_response
+        # await interaction.delete_original_response()
+
+        # edit original message
+        await interaction.edit_original_response(content=f'Chapter {chapter} may not yet be released, check back next Sunday')
 
 @tree.command(name="napier", description="Check if Merphy Napier has a video for a specific One Piece chapter")
 @app_commands.describe(chapter="The chapter number to check (optional)")
