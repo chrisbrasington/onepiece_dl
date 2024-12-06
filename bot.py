@@ -119,7 +119,9 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             # Upload file, send as followup, use filename and file object as a PDF
             file_name = path.split("/")[-1]
             with open(path, "rb") as f:
-                await interaction.followup.send(f'# {manga_title}\nChapter {chapter} available at {url}', file=discord.File(f, file_name))
+                await interaction.followup.send(f'# {manga_title}\nChapter {chapter} available at {url}', 
+                                                file=discord.File(f, file_name),
+                                                suppress_embeds=True)
 
                 # Respond with all images in as few interactions as possible
                 for i in range(0, len(images), 10):
