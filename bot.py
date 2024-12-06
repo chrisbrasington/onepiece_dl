@@ -89,7 +89,7 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             chapter = bot.downloader.get_last_chapter()+1
 
         # Handle downloading a specific chapter
-        await interaction.response.send_message(f'Checking Chapter {chapter} of One Piece...')
+        # await interaction.response.send_message(f'Checking Chapter {chapter} of One Piece...')
         path = bot.downloader.download_chapter(chapter, False)
         url = bot.downloader.get_url(chapter)
         manga_title = bot.downloader.download_and_get_title(url)
@@ -115,7 +115,7 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             # Upload file, send as followup, use filename and file object as a PDF
             file_name = path.split("/")[-1]
             with open(path, "rb") as f:
-                await interaction.followup.send(f'# {manga_title}\nChapter {chapter} available at {url}', file=discord.File(f, file_name))
+                await interaction.response.send(f'# {manga_title}\nChapter {chapter} available at {url}', file=discord.File(f, file_name))
 
                 # Respond with all images in as few interactions as possible
                 for i in range(0, len(images), 10):
@@ -134,8 +134,9 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             print('Done')
 
     except Exception as e:
-        # tell user chapter may not yet be released, check back next Sunday
-        await interaction.followup.send('Chapter may not yet be released, check back next Sunday')
+
+        # respond via DM that the chaper is not found, give the chapter number
+        await interaction.user.send(f'Chapter {chapter} may not yet be released, check back next Sunday')
 
 @tree.command(name="napier", description="Check if Merphy Napier has a video for a specific One Piece chapter")
 @app_commands.describe(chapter="The chapter number to check (optional)")
