@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import re
 
 class MangaDownloader:
+    TABLE_OF_CONTENTS_URL = "https://w15.read-onepiece-manga.com/"
     BASE_URL = "https://cdn.readonepiece.com/file/mangap/2"
     IMAGE_EXTENSION = ".jpeg"
     LAST_CHAPTER_FILE = "last_chapter.txt"
@@ -26,6 +27,30 @@ class MangaDownloader:
         #return f'https://ww10.readonepiece.com/chapter/one-piece-chapter-{chapter}/'
         # https://w13.read-onepiece-manga.com/
         return f'https://www.read-onepiece-manga.com/manga/one-piece-chapter-{chapter}/'
+
+    def get_url_from_table_of_contents(self, chapter):
+        # Download the page content
+        response = requests.get(self.TABLE_OF_CONTENTS_URL)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+
+        # Parse the page with BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Search for all hyperlinks
+        links = soup.find_all('a', href=True)
+
+        # Construct the chapter string to match
+        chapter_str = f"one-piece-chapter-{chapter}"
+
+        # Search for the chapter in the hyperlinks
+        for link in links:
+            href = link['href']
+            if chapter_str in href:
+                return href  # Return the first matching URL
+
+        # If no match is found, return None or raise an exception
+        return None
+
 
     def get_last_chapter(self):
         if os.path.exists(self.LAST_CHAPTER_FILE):
@@ -90,6 +115,14 @@ class MangaDownloader:
             url = self.get_url(chapter)
             print(f"Checking... {url}")
             images = self.find_cdn_images(url)
+
+        if(len(images) == 0):
+            content_url = self.get_url_from_table_of_contents(chapter)
+
+            if url is not None and content_url is not None:       
+                url = content_url     
+                print(f"Checking... {url}")
+                images = self.find_cdn_images(url)
 
         print(images)
 
