@@ -92,8 +92,10 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
         # defer the response as thinking
         await interaction.response.defer(ephemeral=True, thinking=True)
 
+        url = bot.downloader.get_url_from_table_of_contents(chapter)
+        print(f'Chapter {chapter} URL: {url}')
+
         path = bot.downloader.download_chapter(chapter, False)
-        url = bot.downloader.get_url(chapter)
         manga_title = bot.downloader.download_and_get_title(url)
         images = bot.downloader.find_cdn_images(url)
 
