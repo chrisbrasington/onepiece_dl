@@ -32,10 +32,10 @@ def check_one_piece_chapter_video(api_key, chapter_number):
             # return f"Found: {item['snippet']['title']} - {item['snippet']['publishedAt']}"
             video_id = item['id']['videoId']
             video_url = f"https://www.youtube.com/watch?v={video_id}"
-            return video_url
+            return video_url, True
     
     # no video found for chapter
-    return f"No video found yet for chapter {chapter_number}"
+    return f"No video found yet for chapter {chapter_number}", False
 
 # Configure Discord bot
 class MangaBotClient(discord.Client):
@@ -157,7 +157,7 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
 @tree.command(name="napier", description="Check if Merphy Napier has a video for a specific One Piece chapter")
 @app_commands.describe(chapter="The chapter number to check (optional)")
 async def check_napier_video(interaction: discord.Interaction, chapter: int = None):
-    await interaction.response.defer()  # Defer the response to avoid timeouts
+    await interaction.response.defer(ephemeral=False, thinking=True)  # Defer the response to avoid timeouts
 
     # Load the YouTube API key from youtube.txt
     with open("youtube.txt", "r") as f:
@@ -168,9 +168,17 @@ async def check_napier_video(interaction: discord.Interaction, chapter: int = No
         chapter = bot.downloader.get_last_chapter()
 
     # Check for the video
-    result = check_one_piece_chapter_video(api_key, chapter)
+    result, exists = check_one_piece_chapter_video(api_key, chapter)
     
-    await interaction.followup.send(result)
+
+    if exists:
+        await interaction.followup.send(result)
+    else:
+        # delete original
+        await interaction.delete_original_response()
+
+        # respond emphemerally
+        await interaction.followup.send(result, ephemeral=True)      
 
 @tree.command(name="check", description="Check the latest chapter of One Piece")
 async def check_latest_chapter(interaction: discord.Interaction):
