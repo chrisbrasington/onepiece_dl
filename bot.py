@@ -113,6 +113,7 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
 
             # Try to upload PDF, but catch any errors
             file_name = path.split("/")[-1]
+
             try:
                 with open(path, "rb") as f:
                     await interaction.followup.send(f'# {manga_title}\nChapter {chapter} available at {url}', 
@@ -122,11 +123,25 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
                 print(f'PDF upload failed: {pdf_error}')
                 # await interaction.followup.send(f'Failed to upload the PDF for Chapter {chapter}. Uploading images instead.')
 
-            # Upload images in batches of 10
-            for i in range(0, len(images), 10):
-                title = f'# {manga_title}\n{i+1}-{min(i+10, len(images))}/{len(images)}'
+            # Upload images in batches 
+            batch_size = 5
+
+            # remove '- One Piece Manga Online' and trim from title
+            trim_title = re.sub(r' - One Piece Manga Online$', '', manga_title)
+
+            # upload the first image
+            await interaction.followup.send(f'# {trim_title}\n1/{len(images)}', 
+                                            file=discord.File(images[0]))
+
+            for i in range(1, len(images), batch_size):
+                
+                title = f'# {trim_title}\n{i+1}-{min(i+batch_size, len(images))}/{len(images)}'
                 print(f'Uploading {title}...')
-                await interaction.followup.send(title, files=[discord.File(img) for img in images[i:i+10]])
+
+                # print out images to upload
+                print(images[i:i+batch_size])
+
+                await interaction.followup.send(title, files=[discord.File(img) for img in images[i:i+batch_size]])
 
             # Delete images if downloaded
             bot.downloader.delete_images()
@@ -170,67 +185,6 @@ async def check_latest_chapter(interaction: discord.Interaction):
 @app_commands.describe(chapter="The chapter number to download")
 async def download_chapter(interaction: discord.Interaction, chapter: int):
     await handle_chapter_request(interaction, chapter)
-
-@tree.command(name="get", description="Download a manga chapter using a URL parameter")
-@app_commands.describe(url="The URL of the manga chapter to download")
-async def download_chapter_by_url(interaction: discord.Interaction, url: str):
-    await interaction.response.defer()  # Defer the response to avoid timeouts
-    
-    try:
-        # Inform user about the download attempt
-        await interaction.followup.send(f"Attempting to download manga chapter from: {url}")
-
-        # Regular expression to extract the chapter number
-        match = re.search(r"chapter-(\d+)-", url)
-
-        chapter = None
-        if match:
-            chapter = match.group(1)
-            print(f"Chapter number: {chapter}")
-        else:
-            print("Chapter number not found.")
-            await interaction.followup.send("Chapter number not found in the URL.")
-
-        # Use MangaDownloader to download chapter and get title
-        manga_title = bot.downloader.download_and_get_title(url)
-        cdn_images = bot.downloader.find_images(url)
-        images = bot.downloader.download_images(chapter, cdn_images)
-
-        # remove '- One Piece Manga Online' from title and trim spaces
-        manga_title = manga_title.replace('- One Piece Manga Online', '').strip()
-
-        if not images:
-            await interaction.followup.send("No images found for the provided URL. It might be invalid or the chapter is not available.")
-            return
-
-        # Generate a PDF and get the path
-        path = f"manga_chapters/{manga_title}.pdf"
-        try:
-            bot.downloader.images_to_pdf(images, path)
-        except Exception as pdf_error:
-            print(f"Error during PDF generation: {pdf_error}")
-            await interaction.followup.send(f"Failed to generate the PDF for {manga_title}. Uploading images instead.")
-
-        # Try uploading the PDF
-        try:
-            file_name = path.split("/")[-1]
-            with open(path, "rb") as f:
-                await interaction.followup.send(f"Downloaded chapter: {manga_title}\nURL: {url}", file=discord.File(f, file_name))
-        except Exception as pdf_error:
-            print(f'PDF upload failed: {pdf_error}')
-            # await interaction.followup.send(f'Failed to upload the PDF for {manga_title}. Uploading images instead.')
-
-        # Upload images in batches of 10
-        for i in range(0, len(images), 10):
-            title = f'# {manga_title}\n{i+1}-{min(i+10, len(images))}/{len(images)}'
-            print(f'Uploading {title}...')
-            await interaction.followup.send(title, files=[discord.File(img) for img in images[i:i+10]])
-
-        bot.downloader.delete_images()
-
-    except Exception as e:
-        print(f"Error during download: {e}")
-        await interaction.followup.send(f"Failed to download manga chapter from the provided URL. Please check the URL and try again.")
 
 # Run the bot with your token
 with open("bot_token.txt", "r") as f:
