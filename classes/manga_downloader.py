@@ -74,11 +74,11 @@ class MangaDownloader:
             soup = BeautifulSoup(response.content, 'html.parser')
 
             image_links = []
-            pattern = re.compile(r'https://.*\.(png|jpg)')
+            pattern = re.compile(r'https://.*\.(png|jpg|jpeg)')
 
             for img in soup.find_all('img', src=True):
                 img_src = img['src'].replace('\r', '')
-                if pattern.match(img_src) and re.match(r'.*/[\d-]+\.(png|jpg)$', img_src):
+                if pattern.match(img_src) and re.match(r'.*/[\d-]+\.(png|jpg|jpeg)$', img_src):
                     image_links.append(img_src)
 
             image_links = [re.sub(r'\?.*', '', img) for img in image_links]

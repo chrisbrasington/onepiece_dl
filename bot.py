@@ -111,12 +111,15 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
         if success:
             await interaction.edit_original_response(content=f'Chapter {chapter} uploading...')
 
+            # remove '- One Piece Manga Online' and trim from title
+            trim_title = re.sub(r' - One Piece Manga Online$', '', manga_title)
+
             # Try to upload PDF, but catch any errors
             file_name = path.split("/")[-1]
 
             try:
                 with open(path, "rb") as f:
-                    await interaction.followup.send(f'# {manga_title}\nChapter {chapter} available at {url}', 
+                    await interaction.followup.send(f'# {trim_title}\nChapter {chapter} available at {url}', 
                                                     file=discord.File(f, file_name),
                                                     suppress_embeds=True)
             except Exception as pdf_error:
@@ -125,9 +128,6 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
 
             # Upload images in batches 
             batch_size = 5
-
-            # remove '- One Piece Manga Online' and trim from title
-            trim_title = re.sub(r' - One Piece Manga Online$', '', manga_title)
 
             # upload the first image
             await interaction.followup.send(f'# {trim_title}\n1/{len(images)}', 
