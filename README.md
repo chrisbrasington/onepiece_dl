@@ -8,6 +8,10 @@ This project consists of three main components:
 
 ## Manga Downloader Script
 
+### Host
+
+https://www.read-onepiece-manga.com/
+
 ### Description
 
 The Manga Downloader script performs the following tasks:
