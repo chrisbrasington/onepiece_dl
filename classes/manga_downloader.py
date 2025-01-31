@@ -7,6 +7,7 @@ import re
 
 class MangaDownloader:
     BASE_URL = "https://www.read-onepiece-manga.com/manga/one-piece-chapter-{}/"
+    TABLE_OF_CONTENTS_URL = 'https://w17.read-onepiece-manga.com/'
     IMAGE_EXTENSION = ".jpeg"
     LAST_CHAPTER_FILE = "last_chapter.txt"
     OUTPUT_DIR = "manga_chapters"
@@ -77,8 +78,17 @@ class MangaDownloader:
             pattern = re.compile(r'https://.*\.(png|jpg|jpeg)')
 
             for img in soup.find_all('img', src=True):
+                
                 img_src = img['src'].replace('\r', '')
-                if pattern.match(img_src) and re.match(r'.*/[\d-]+\.(png|jpg|jpeg)$', img_src):
+                # if pattern.match(img_src) and re.match(r'.*/[\d-]+\.(png|jpg|jpeg)$', img_src):
+                #     image_links.append(img_src)
+
+                print('Checking: ', img_src)
+
+                # allow any image so long as it ends with a number and extension: png, jpg, jpeg
+                # for example: https://cdn.onepiecechapters.com/file/CDN-M-A-N/onepiece_1136_sun_001.png
+                # also must start with https://
+                if re.match(r'https://.*\d+\.(png|jpg|jpeg)$', img_src):
                     image_links.append(img_src)
 
             image_links = [re.sub(r'\?.*', '', img) for img in image_links]
@@ -98,7 +108,26 @@ class MangaDownloader:
         return p_tag.get_text(strip=True) if p_tag else soup.title.string
 
     def get_url(self, chapter):
-        return self.BASE_URL.format(chapter)  # Fix: Returns only a string
+        # return self.BASE_URL.format(chapter) 
+        return self.get_url_from_table_of_contents(chapter)
+    
+    def get_url_from_table_of_contents(self, chapter):
+        # Download the page content
+        response = requests.get(self.TABLE_OF_CONTENTS_URL)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        # Parse the page with BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+        # Search for all hyperlinks
+        links = soup.find_all('a', href=True)
+        # Construct the chapter string to match
+        chapter_str = f"one-piece-chapter-{chapter}"
+        # Search for the chapter in the hyperlinks
+        for link in links:
+            href = link['href']
+            if chapter_str in href:
+                return href  # Return the first matching URL
+        # If no match is found, return None or raise an exception
+        return None
 
     def images_to_pdf(self, image_paths, output_pdf):
         images = [Image.open(image_path).convert("L") for image_path in image_paths]
