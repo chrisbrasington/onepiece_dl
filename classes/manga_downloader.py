@@ -33,7 +33,7 @@ class MangaDownloader:
             chapter = last_chapter + 1 if last_chapter else 1
 
         print(f"Downloading chapter {chapter}...")
-        images, chapter = self.download_images(chapter)
+        images = self.download_images(chapter)
         if images:
             output_pdf = os.path.join(self.OUTPUT_DIR, f"one piece - {chapter}.pdf")
             self.images_to_pdf(images, output_pdf)
@@ -41,13 +41,13 @@ class MangaDownloader:
             if delete_images:
                 self.delete_images()
             self.save_last_chapter(chapter)
-            return output_pdf, chapter
+            return output_pdf
         else:
             print(f"No images found for chapter {chapter}. It might not be released yet.")
-            return None, chapter
+            return None
 
     def download_images(self, chapter):
-        url, chapter = self.get_url(chapter)
+        url = self.get_url(chapter)  # Fix: No longer returns a tuple
         print(f"Checking... {url}")
         images = self.find_images(url)
 
@@ -62,7 +62,7 @@ class MangaDownloader:
                 f.write(response.content)
             images_on_disk.append(image_path)
 
-        return images_on_disk, chapter
+        return images_on_disk
 
     def file_exists(self, file):
         return os.path.exists(file)
@@ -98,10 +98,7 @@ class MangaDownloader:
         return p_tag.get_text(strip=True) if p_tag else soup.title.string
 
     def get_url(self, chapter):
-        if chapter is None:
-            with open(self.LAST_CHAPTER_FILE, "r") as f:
-                chapter = int(f.read().strip())
-        return self.BASE_URL.format(chapter), chapter
+        return self.BASE_URL.format(chapter)  # Fix: Returns only a string
 
     def images_to_pdf(self, image_paths, output_pdf):
         images = [Image.open(image_path).convert("L") for image_path in image_paths]
@@ -109,7 +106,7 @@ class MangaDownloader:
 
     def save_last_chapter(self, chapter):
         last_chapter = self.get_last_chapter()
-        if chapter > last_chapter:
+        if last_chapter is None or chapter > last_chapter:
             print(f"Saving last chapter as {chapter}...")
             with open(self.LAST_CHAPTER_FILE, "w") as f:
                 f.write(str(chapter))
