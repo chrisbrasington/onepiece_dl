@@ -4,6 +4,7 @@ from PIL import Image
 from fpdf import FPDF
 from bs4 import BeautifulSoup
 import re
+from math import gcd
 
 class MangaDownloader:
     BASE_URL = "https://www.read-onepiece-manga.com/manga/one-piece-chapter-{}/"
@@ -54,15 +55,23 @@ class MangaDownloader:
 
         images_on_disk = []
         for i, image_url in enumerate(images):
-            print(f"Downloading image {i+1}... {image_url}")
+            print(f"Downloading image {i+1}... {image_url}", end=' ')
             response = requests.get(image_url)
             if response.status_code == 404:
                 break
             image_path = os.path.join(self.OUTPUT_DIR, f"{chapter}_{i+1}{self.IMAGE_EXTENSION}")
             with open(image_path, "wb") as f:
                 f.write(response.content)
-            images_on_disk.append(image_path)
 
+            aspect_ratio = self.get_aspect_ratio(image_path)
+
+            if(aspect_ratio == '2:3' or aspect_ratio == '4:3'):
+                images_on_disk.append(image_path)
+                print('✅')
+            else:
+                print('❌')
+                os.remove(image_path)
+            
         return images_on_disk
 
     def file_exists(self, file):
@@ -80,15 +89,9 @@ class MangaDownloader:
             for img in soup.find_all('img', src=True):
                 
                 img_src = img['src'].replace('\r', '')
-                # if pattern.match(img_src) and re.match(r'.*/[\d-]+\.(png|jpg|jpeg)$', img_src):
-                #     image_links.append(img_src)
 
-                print('Checking: ', img_src)
-
-                # allow any image so long as it ends with a number and extension: png, jpg, jpeg
-                # for example: https://cdn.onepiecechapters.com/file/CDN-M-A-N/onepiece_1136_sun_001.png
-                # also must start with https://
-                if re.match(r'https://.*\d+\.(png|jpg|jpeg)$', img_src):
+                # allow any https image
+                if re.match(r'https://.*.(png|jpg|jpeg)$', img_src):
                     image_links.append(img_src)
 
             image_links = [re.sub(r'\?.*', '', img) for img in image_links]
@@ -96,6 +99,14 @@ class MangaDownloader:
         except requests.RequestException as e:
             print(f"Error downloading the page: {e}")
             return []
+
+    def get_aspect_ratio(self, image_path):
+        with Image.open(image_path) as img:
+            width, height = img.size
+            ratio_gcd = gcd(width, height)
+            aspect_width = width // ratio_gcd
+            aspect_height = height // ratio_gcd
+            return f"{aspect_width}:{aspect_height}"
 
     def get_last_chapter(self):
         if os.path.exists(self.LAST_CHAPTER_FILE):
