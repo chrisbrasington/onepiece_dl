@@ -3,7 +3,7 @@ import discord
 from discord import app_commands
 from googleapiclient.discovery import build
 from classes.manga_downloader import MangaDownloader
-import json, re
+import json, os, re
 
 # Function to check if Merphy Napier has a video for the chapter
 def check_one_piece_chapter_video(api_key, chapter_number):
@@ -100,9 +100,22 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
         images = [f"manga_chapters/{chapter}_{i+1}{'.jpeg' if image.endswith('jpeg') else '.png'}" for i, image in enumerate(images)]
 
         # check if file exists, may accidentally be jpeg or png - or vice versa
-        for i, image in enumerate(images):
-            if not bot.downloader.file_exists(image):
-                images[i] = image.replace('.jpeg', '.png') if image.endswith('.jpeg') else image.replace('.png', '.jpeg')
+        # may not exist if deleted due to being an ad (incorrect aspect ratio)
+        # Check if file with any extension exists
+        for i in range(len(images) - 1, -1, -1):  # Iterate in reverse to safely remove items
+            base_name, _ = os.path.splitext(images[i])
+            found = False
+
+            # Check for common image extensions
+            for ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']:
+                if bot.downloader.file_exists(base_name + ext):
+                    images[i] = base_name + ext
+                    found = True
+                    break
+
+            # If no file is found with any extension, remove from the list
+            if not found:
+                images.pop(i)
 
         print(images)
 
