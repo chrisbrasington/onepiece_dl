@@ -119,7 +119,7 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
 
         print(images)
 
-        success = path is not None
+        success = path is not None and len(images) > 0
 
         if success:
             await interaction.edit_original_response(content=f'Chapter {chapter} uploading...')
@@ -161,6 +161,8 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
 
             print(f'Chapter {chapter} uploaded successfully')
             print('Done')
+        else:
+            await interaction.edit_original_response(content=f'Chapter {chapter} may not yet be released, check back next Sunday')
 
     except Exception as e:
         print(f'Error during download: {e}')
