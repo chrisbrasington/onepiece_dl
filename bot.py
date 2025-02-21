@@ -205,7 +205,7 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             except Exception as pdf_error:
                 print(f'PDF upload failed: {pdf_error}')
                 # await interaction.followup.send(f'Failed to upload the PDF for Chapter {chapter}. Uploading images instead.')
-                await interaction.followup.send(f'# {trim_title}\nChapter {chapter} available at {url}\n\n(no pdf, too large)', suppress_embeds=True)
+                await interaction.followup.send(f'# {trim_title}\nChapter {chapter} available at {url}\n(no pdf, too large)', suppress_embeds=True)
 
             # Upload images in batches 
             batch_size = 5
