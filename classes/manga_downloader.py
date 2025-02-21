@@ -50,29 +50,36 @@ class MangaDownloader:
             return None
 
     def download_images(self, chapter):
-        url = self.get_url(chapter)  # Fix: No longer returns a tuple
+        url = self.get_url(chapter) 
         print(f"Checking... {url}")
         images = self.find_images(url)
 
         images_on_disk = []
+        allowed_domains = [
+            "blogger.googleusercontent.com",
+            "cdn.onepiecechapters.com",
+            r"([a-z0-9]+)\.wp\.com"  # Regex to match any subdomain of wp.com
+        ]
+
         for i, image_url in enumerate(images):
             print(f"Downloading image {i+1}... {image_url}", end=' ')
+
+            # Check if URL matches allowed domains
+            if not any(re.search(pattern, image_url) for pattern in allowed_domains):
+                print("❌ [Blocked]")
+                continue  # Skip downloading
+
             response = requests.get(image_url)
             if response.status_code == 404:
                 break
+            
             image_path = os.path.join(self.OUTPUT_DIR, f"{chapter}_{i+1}{self.IMAGE_EXTENSION}")
             with open(image_path, "wb") as f:
                 f.write(response.content)
 
-            aspect_ratio = self.get_aspect_ratio(image_path)
+            images_on_disk.append(image_path)
+            print('✅')
 
-            if(aspect_ratio == '2:3' or aspect_ratio == '4:3'):
-                images_on_disk.append(image_path)
-                print('✅')
-            else:
-                print('❌')
-                os.remove(image_path)
-            
         return images_on_disk
 
     def file_exists(self, file):
@@ -107,13 +114,13 @@ class MangaDownloader:
             print(f"Error downloading the page: {e}")
             return []
 
-    def get_aspect_ratio(self, image_path):
-        with Image.open(image_path) as img:
-            width, height = img.size
-            ratio_gcd = gcd(width, height)
-            aspect_width = width // ratio_gcd
-            aspect_height = height // ratio_gcd
-            return f"{aspect_width}:{aspect_height}"
+    # def get_aspect_ratio(self, image_path):
+    #     with Image.open(image_path) as img:
+    #         width, height = img.size
+    #         ratio_gcd = gcd(width, height)
+    #         aspect_width = width // ratio_gcd
+    #         aspect_height = height // ratio_gcd
+    #         return f"{aspect_width}:{aspect_height}"
 
     def get_last_chapter(self):
         if os.path.exists(self.LAST_CHAPTER_FILE):
