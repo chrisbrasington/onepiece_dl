@@ -4,6 +4,7 @@ from discord import app_commands
 from googleapiclient.discovery import build
 from classes.manga_downloader import MangaDownloader
 import json, os, re
+from PIL import Image
 
 # Function to check if Merphy Napier has a video for the chapter
 def check_one_piece_chapter_video(api_key, chapter_number):
@@ -33,6 +34,72 @@ def check_one_piece_chapter_video(api_key, chapter_number):
     
     # no video found for chapter
     return f"No video found yet for chapter {chapter_number}", False
+
+async def convert_and_compress_image(image_path, max_size=2 * 1024 * 1024):
+    """Convert image to JPEG and compress under 2MB."""
+    img = Image.open(image_path).convert("RGB")  # Ensure compatibility
+    temp_path = image_path.rsplit(".", 1)[0] + "_compressed.jpg"  # Avoid overwriting
+
+    quality = 100  # Start with high quality
+    img.save(temp_path, format="JPEG", quality=quality)
+
+    # If file is small enough, return early
+    if os.path.getsize(temp_path) <= max_size:
+        return temp_path
+
+    # If still too large, force compression
+    while os.path.getsize(temp_path) > max_size and quality > 10:
+        quality -= 5
+        img.save(temp_path, format="JPEG", quality=quality)
+
+    return temp_path
+
+async def upload_images(interaction, images, trim_title):
+    max_file_size = 2 * 1024 * 1024  # 2MB per file
+    max_attachments = 5  # Max 5 files per batch
+    batch = []
+    index = 1
+
+    for i, img in enumerate(images):
+        if i == 0:
+            print(f"Skipping first image: {img}, already sent")
+            continue  # Skip first image
+        file_size = os.path.getsize(img)
+
+        # Convert and compress image if necessary
+        print(f"Processing {img} ({file_size / (1024 * 1024):.2f}MB)...")
+        if file_size > max_file_size:
+            img = await convert_and_compress_image(img)
+
+        file_size = os.path.getsize(img)  # Re-check after compression
+        if file_size > max_file_size:
+            print(f"Skipping {img}, still too large after compression.")
+            continue
+
+        batch.append(img)
+
+        # Upload when batch reaches max attachments
+        if len(batch) == max_attachments:
+            await send_batch(interaction, batch, trim_title, index, len(images))
+            index += len(batch)
+            batch = []  # Reset batch
+
+    # Upload any remaining images
+    if batch:
+        await send_batch(interaction, batch, trim_title, index, len(images))
+
+async def send_batch(interaction, batch, trim_title, index, total_images):
+    """Uploads a batch of images to Discord."""
+    if not batch:  # <-- Fix: Prevent empty batch error
+        return  
+    
+    title = f'# {trim_title}\n{index+1}-{index+len(batch)}/{total_images}'
+    batch_sizes = [os.path.getsize(f) / (1024 * 1024) for f in batch]
+    
+    print(f'Uploading {title}...')
+    print(f'Batch file sizes: {[f"{size:.2f}MB" for size in batch_sizes]}')
+
+    await interaction.followup.send(title, files=[discord.File(f) for f in batch])
 
 # Configure Discord bot
 class MangaBotClient(discord.Client):
@@ -138,6 +205,7 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             except Exception as pdf_error:
                 print(f'PDF upload failed: {pdf_error}')
                 # await interaction.followup.send(f'Failed to upload the PDF for Chapter {chapter}. Uploading images instead.')
+                await interaction.followup.send(f'# {trim_title}\nChapter {chapter} available at {url}\n\n(no pdf, too large)')
 
             # Upload images in batches 
             batch_size = 5
@@ -145,18 +213,16 @@ async def handle_chapter_request(interaction: discord.Interaction, chapter: int 
             # upload the first image
             await interaction.followup.send(f'# {trim_title}\n1/{len(images)}', 
                                             file=discord.File(images[0]))
+            
+            await upload_images(interaction, images, trim_title)
 
-            for i in range(1, len(images), batch_size):
-                
-                title = f'# {trim_title}\n{i+1}-{min(i+batch_size, len(images))}/{len(images)}'
+            # Upload any remaining images
+            if batch:
+                title = f'# {trim_title}\n{index+1}-{index+len(batch)}/{len(images)}'
                 print(f'Uploading {title}...')
+                await interaction.followup.send(title, files=[discord.File(f) for f in batch])
 
-                # print out images to upload
-                print(images[i:i+batch_size])
-
-                await interaction.followup.send(title, files=[discord.File(img) for img in images[i:i+batch_size]])
-
-            # Delete images if downloaded
+                    # Delete images if downloaded
             bot.downloader.delete_images()
 
             print(f'Chapter {chapter} uploaded successfully')
