@@ -5,6 +5,7 @@ from fpdf import FPDF
 from bs4 import BeautifulSoup
 import re
 from math import gcd
+import sys
 
 class MangaDownloader:
     BASE_URL = "https://www.read-onepiece-manga.com/manga/one-piece-chapter-{}/"
@@ -84,17 +85,23 @@ class MangaDownloader:
             soup = BeautifulSoup(response.content, 'html.parser')
 
             image_links = []
-            pattern = re.compile(r'https://.*\.(png|jpg|jpeg)')
 
+            # Extract images from <img> tags
             for img in soup.find_all('img', src=True):
-                
-                img_src = img['src'].replace('\r', '')
-
-                # allow any https image
-                if re.match(r'https://.*.(png|jpg|jpeg)$', img_src):
+                img_src = img['src'].strip()
+                if img_src.startswith("http") and img_src not in image_links:
                     image_links.append(img_src)
 
-            image_links = [re.sub(r'\?.*', '', img) for img in image_links]
+            # Extract images from <meta property="og:image">
+            for meta in soup.find_all("meta", attrs={"property": "og:image"}):
+                img_src = meta.get("content", "").strip()
+                if img_src.startswith("http") and img_src not in image_links:
+                    image_links.append(img_src)  # No modifications
+
+            # for i in image_links:
+            #     print(i)
+            #     print()
+
             return image_links
         except requests.RequestException as e:
             print(f"Error downloading the page: {e}")
