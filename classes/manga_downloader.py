@@ -58,7 +58,9 @@ class MangaDownloader:
         allowed_domains = [
             "blogger.googleusercontent.com",
             "cdn.onepiecechapters.com",
-            r"([a-z0-9]+)\.wp\.com"  # Regex to match any subdomain of wp.com
+            r"([a-z0-9]+)\.wp\.com",  # Regex to match any subdomain of wp.com
+            "cdn", # loosely allow cdn
+            "wp-content" # loosely allow wp-content
         ]
 
         for i, image_url in enumerate(images):
