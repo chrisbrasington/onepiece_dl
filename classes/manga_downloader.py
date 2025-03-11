@@ -63,11 +63,15 @@ class MangaDownloader:
             "wp-content" # loosely allow wp-content
         ]
 
+        blocked_patterns = [
+            ".avif"
+        ]
+
         for i, image_url in enumerate(images):
             print(f"Downloading image {i+1}... {image_url}", end=' ')
 
             # Check if URL matches allowed domains
-            if not any(re.search(pattern, image_url) for pattern in allowed_domains):
+            if not any(re.search(pattern, image_url) for pattern in allowed_domains) or any(re.search(pattern, image_url) for pattern in blocked_patterns):
                 print("❌ [Blocked]")
                 continue  # Skip downloading
 
