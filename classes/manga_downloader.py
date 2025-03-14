@@ -64,7 +64,9 @@ class MangaDownloader:
         ]
 
         blocked_patterns = [
-            ".avif"
+            ".avif",
+            "wanted-poster.png",
+            "One-Piece-Manga.webp"
         ]
 
         for i, image_url in enumerate(images):
@@ -114,6 +116,12 @@ class MangaDownloader:
             # for i in image_links:
             #     print(i)
             #     print()
+
+            if(len(image_links) <= 5):
+                print("Not enough images found, rejecting")
+                for i in image_links:
+                    print("  "+i)
+                image_links = []
 
             return image_links
         except requests.RequestException as e:
