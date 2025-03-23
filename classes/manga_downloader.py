@@ -66,7 +66,9 @@ class MangaDownloader:
         blocked_patterns = [
             ".avif",
             "wanted-poster.png",
-            "One-Piece-Manga.webp"
+            "One-Piece-Manga.webp",
+            "fiver",
+            "ck-cdn.com"
         ]
 
         for i, image_url in enumerate(images):
