@@ -1,5 +1,5 @@
 
-# Project Overview
+# One Piece manga dl and discord bot
 
 This project consists of three main components:
 1. **Manga Downloader Script**: Downloads manga chapters from a specified URL, converts the images into a PDF, and deletes the images afterward.
