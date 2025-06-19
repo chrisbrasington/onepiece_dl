@@ -145,35 +145,22 @@ bot = MangaBotClient()
 tree = app_commands.CommandTree(bot)
 
 async def handle_download(interaction: discord.Interaction, url: str, chapter: int = None):
-    await interaction.response.defer(ephemeral=False, thinking=True)
+    await interaction.response.defer(ephemeral=True, thinking=True)
 
     try:
         manga_title = bot.downloader.download_and_get_title(url)
         trim_title = re.sub(r' - One Piece Manga Online$', '', manga_title)
 
-        output_name = f"chapter_{chapter}" if chapter else trim_title.replace(" ", "_").lower()
-        path, raw_images = (
-            bot.downloader.download_chapter(chapter, False),
-            bot.downloader.find_images(url)
-        ) if chapter else bot.downloader.download_from_url(url, output_name=output_name, delete_images=False)
+        if chapter:
+            path, images = bot.downloader.download_chapter(chapter, delete_images=False)
+        else:
+            output_name = trim_title.replace(" ", "_").lower()
+            path, images = bot.downloader.download_from_url(url, output_name=output_name, delete_images=False)
 
-        # Construct file paths from image list
-        images = [
-            f"{bot.downloader.OUTPUT_DIR}/{output_name}_{i+1}.jpeg"
-            for i in range(len(raw_images))
-        ]
-
-        # Validate file existence with flexible extensions
-        for i in range(len(images) - 1, -1, -1):
-            base_name, _ = os.path.splitext(images[i])
-            found = False
-            for ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']:
-                if bot.downloader.file_exists(base_name + ext):
-                    images[i] = base_name + ext
-                    found = True
-                    break
-            if not found:
-                images.pop(i)
+        if path is None or not images:            
+            await interaction.edit_original_response(content=f'Chapter {chapter} may not yet be released, check back next Sunday')
+            #await interaction.user.send(f'Chapter {chapter} may not yet be released, check back next Sunday')
+            return
 
         await interaction.edit_original_response(content=f'Uploading chapter...')
 

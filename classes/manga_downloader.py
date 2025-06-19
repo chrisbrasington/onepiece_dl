@@ -30,24 +30,66 @@ class MangaDownloader:
         print(self.get_title(soup))
         return self.get_title(soup)
 
-    def download_chapter(self, chapter=None, delete_images=True):
-        if chapter is None:
-            last_chapter = self.get_last_chapter()
-            chapter = last_chapter + 1 if last_chapter else 1
+    def download_chapter(self, chapter, delete_images=True):
+        url = self.get_url(chapter)
+        print(f"Downloading chapter {chapter} from {url}...")
+        images = self.find_images(url)
 
-        print(f"Downloading chapter {chapter}...")
-        images = self.download_images(chapter)
-        if images:
-            output_pdf = os.path.join(self.OUTPUT_DIR, f"one piece - {chapter}.pdf")
-            self.images_to_pdf(images, output_pdf)
-            print(f"Chapter {chapter} downloaded and saved as {output_pdf}")
-            if delete_images:
-                self.delete_images()
-            self.save_last_chapter(chapter)
-            return output_pdf
-        else:
-            print(f"No images found for chapter {chapter}. It might not be released yet.")
-            return None
+        images_on_disk = []
+        allowed_domains = [
+            "blogger.googleusercontent.com",
+            "cdn.onepiecechapters.com",
+            r"([a-z0-9]+)\.wp\.com",  # Regex to match any subdomain of wp.com
+            "cdn",  # loosely allow cdn
+            "wp-content"  # loosely allow wp-content
+        ]
+
+        blocked_patterns = [
+            ".avif",
+            "wanted-poster.png",
+            "One-Piece-Manga.webp",
+            "fiver",
+            "ck-cdn.com"
+        ]
+
+        for i, image_url in enumerate(images):
+            print(f"Downloading image {i+1}... {image_url}", end=' ')
+
+            # Check if URL matches allowed domains
+            if not any(re.search(pattern, image_url) for pattern in allowed_domains) or any(re.search(pattern, image_url) for pattern in blocked_patterns):
+                print("❌ [Blocked]")
+                continue  # Skip downloading
+
+            try:
+                response = requests.get(image_url)
+                response.raise_for_status()
+            except Exception as e:
+                print(f"❌ Failed to download image: {e}")
+                continue
+
+            ext = os.path.splitext(image_url)[1].split('?')[0]
+            if ext.lower() not in ['.jpg', '.jpeg', '.png']:
+                ext = self.IMAGE_EXTENSION  # fallback extension
+
+            image_path = os.path.join(self.OUTPUT_DIR, f"{chapter}_{i+1}{ext}")
+            with open(image_path, "wb") as f:
+                f.write(response.content)
+
+            images_on_disk.append(image_path)
+            print('✅')
+
+        if not images_on_disk:
+            print("No images downloaded.")
+            return None, []
+
+        output_pdf = os.path.join(self.OUTPUT_DIR, f"one piece - {chapter}.pdf")
+        self.images_to_pdf(images_on_disk, output_pdf)
+        print(f"Chapter {chapter} downloaded as PDF: {output_pdf}")
+
+        if delete_images:
+            self.delete_images()
+
+        return output_pdf, images_on_disk
 
     def download_from_url(self, url, output_name="manual", delete_images=True):
         print(f"Downloading from direct URL: {url}")
