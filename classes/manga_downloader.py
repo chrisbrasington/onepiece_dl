@@ -49,6 +49,44 @@ class MangaDownloader:
             print(f"No images found for chapter {chapter}. It might not be released yet.")
             return None
 
+    def download_from_url(self, url, output_name="manual", delete_images=True):
+        print(f"Downloading from direct URL: {url}")
+        images = self.find_images(url)
+
+        if not images:
+            print("❌ No images found.")
+            return None, []
+
+        images_on_disk = []
+        for i, image_url in enumerate(images):
+            print(f"Downloading image {i+1}... {image_url}", end=' ')
+            try:
+                response = requests.get(image_url)
+                response.raise_for_status()
+                ext = os.path.splitext(image_url)[1].split('?')[0]
+                if not ext.lower() in ['.jpg', '.jpeg', '.png']:
+                    ext = '.jpeg'  # fallback
+                image_path = os.path.join(self.OUTPUT_DIR, f"{output_name}_{i+1}{ext}")
+                with open(image_path, "wb") as f:
+                    f.write(response.content)
+                images_on_disk.append(image_path)
+                print('✅')
+            except Exception as e:
+                print(f"❌ Failed to download image: {e}")
+                continue
+
+        if not images_on_disk:
+            return None, []
+
+        output_pdf = os.path.join(self.OUTPUT_DIR, f"{output_name}.pdf")
+        self.images_to_pdf(images_on_disk, output_pdf)
+        print(f"✅ Download complete: {output_pdf}")
+
+        if delete_images:
+            self.delete_images()
+
+        return output_pdf, images_on_disk
+
     def download_images(self, chapter):
         url = self.get_url(chapter) 
         print(f"Checking... {url}")
