@@ -182,6 +182,9 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
         bot.downloader.delete_images()
         print(f"Chapter {'from URL' if not chapter else chapter} uploaded successfully")
 
+        # if greater than last chapter, save
+        bot.downloader.save_last_chapter(chapter)
+
     except Exception as e:
         print(f"Error during download: {e}")
         await interaction.edit_original_response(content=f"❌ Failed to download{' chapter ' + str(chapter) if chapter else ' from URL'}")
