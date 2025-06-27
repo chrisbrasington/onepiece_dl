@@ -16,7 +16,7 @@ if mountpoint -q $syncDestination; then
 
     # copy all files in the manga_chapters directory to the KOBOeReader
     # when they do not exist
-    rsync -av --ignore-existing --no-g manga_chapters/* $syncDestination/onepiece
+    rsync -av --ignore-existing --no-g manga_chapters/*.pdf $syncDestination/onepiece
 
     # Unmount the remote directory
     fusermount -u $syncDestination
