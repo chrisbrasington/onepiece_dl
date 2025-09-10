@@ -49,7 +49,8 @@ class MangaDownloader:
             "wanted-poster.png",
             "One-Piece-Manga.webp",
             "fiver",
-            "ck-cdn.com"
+            "ck-cdn.com",
+            ".webp"
         ]
 
         for i, image_url in enumerate(images):
@@ -148,7 +149,8 @@ class MangaDownloader:
             "wanted-poster.png",
             "One-Piece-Manga.webp",
             "fiver",
-            "ck-cdn.com"
+            "ck-cdn.com",
+            ".webp"
         ]
 
         for i, image_url in enumerate(images):
