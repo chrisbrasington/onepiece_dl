@@ -6,6 +6,8 @@ from bs4 import BeautifulSoup
 import re
 from math import gcd
 import sys
+from urllib.parse import urlparse
+
 
 class MangaDownloader:
     BASE_URL = "https://www.read-onepiece-manga.com/manga/one-piece-chapter-{}/"
@@ -30,6 +32,19 @@ class MangaDownloader:
         print(self.get_title(soup))
         return self.get_title(soup)
 
+    # -------------------------------
+    # 🔑 Helper: Domain filtering
+    # -------------------------------
+    def is_allowed(self, url, allowed_domains, blocked_patterns):
+        host = urlparse(url).netloc.lower()
+
+        # Explicitly block unwanted patterns
+        if any(re.search(pattern, url) for pattern in blocked_patterns):
+            return False
+
+        # Allow only if host matches known patterns
+        return any(re.search(pattern, host) for pattern in allowed_domains)
+
     def download_chapter(self, chapter, delete_images=True):
         url = self.get_url(chapter)
         print(f"Downloading chapter {chapter} from {url}...")
@@ -37,29 +52,29 @@ class MangaDownloader:
 
         images_on_disk = []
         allowed_domains = [
-            "blogger.googleusercontent.com",
-            "cdn.onepiecechapters.com",
-            r"([a-z0-9]+)\.wp\.com",  # Regex to match any subdomain of wp.com
-            "cdn",  # loosely allow cdn
-            "wp-content"  # loosely allow wp-content
+            r"blogger\.googleusercontent\.com",
+            r"cdn\.onepiecechapters\.com",
+            r"([a-z0-9]+)\.wp\.com",  # Regex for any subdomain of wp.com
+            r"cdn",
+            r"wp-content"
         ]
 
         blocked_patterns = [
-            ".avif",
-            "wanted-poster.png",
-            "One-Piece-Manga.webp",
-            "fiver",
-            "ck-cdn.com",
-            ".webp"
+            r"\.avif$",
+            r"wanted-poster\.png",
+            r"One-Piece-Manga\.webp",
+            r"fiver",
+            r"ck-cdn\.com",
+            r"\.webp$",
+            r"imageshack\.com"
         ]
 
         for i, image_url in enumerate(images):
             print(f"Downloading image {i+1}... {image_url}", end=' ')
 
-            # Check if URL matches allowed domains
-            if not any(re.search(pattern, image_url) for pattern in allowed_domains) or any(re.search(pattern, image_url) for pattern in blocked_patterns):
+            if not self.is_allowed(image_url, allowed_domains, blocked_patterns):
                 print("❌ [Blocked]")
-                continue  # Skip downloading
+                continue
 
             try:
                 response = requests.get(image_url)
@@ -101,8 +116,31 @@ class MangaDownloader:
             return None, []
 
         images_on_disk = []
+        allowed_domains = [
+            r"blogger\.googleusercontent\.com",
+            r"cdn\.onepiecechapters\.com",
+            r"([a-z0-9]+)\.wp\.com",
+            r"cdn",
+            r"wp-content"
+        ]
+
+        blocked_patterns = [
+            r"\.avif$",
+            r"wanted-poster\.png",
+            r"One-Piece-Manga\.webp",
+            r"fiver",
+            r"ck-cdn\.com",
+            r"\.webp$",
+            r"imageshack\.com"
+        ]
+
         for i, image_url in enumerate(images):
             print(f"Downloading image {i+1}... {image_url}", end=' ')
+
+            if not self.is_allowed(image_url, allowed_domains, blocked_patterns):
+                print("❌ [Blocked]")
+                continue
+
             try:
                 response = requests.get(image_url)
                 response.raise_for_status()
@@ -131,40 +169,40 @@ class MangaDownloader:
         return output_pdf, images_on_disk
 
     def download_images(self, chapter):
-        url = self.get_url(chapter) 
+        url = self.get_url(chapter)
         print(f"Checking... {url}")
         images = self.find_images(url)
 
         images_on_disk = []
         allowed_domains = [
-            "blogger.googleusercontent.com",
-            "cdn.onepiecechapters.com",
-            r"([a-z0-9]+)\.wp\.com",  # Regex to match any subdomain of wp.com
-            "cdn", # loosely allow cdn
-            "wp-content" # loosely allow wp-content
+            r"blogger\.googleusercontent\.com",
+            r"cdn\.onepiecechapters\.com",
+            r"([a-z0-9]+)\.wp\.com",
+            r"cdn",
+            r"wp-content"
         ]
 
         blocked_patterns = [
-            ".avif",
-            "wanted-poster.png",
-            "One-Piece-Manga.webp",
-            "fiver",
-            "ck-cdn.com",
-            ".webp"
+            r"\.avif$",
+            r"wanted-poster\.png",
+            r"One-Piece-Manga\.webp",
+            r"fiver",
+            r"ck-cdn\.com",
+            r"\.webp$",
+            r"imageshack\.com"
         ]
 
         for i, image_url in enumerate(images):
             print(f"Downloading image {i+1}... {image_url}", end=' ')
 
-            # Check if URL matches allowed domains
-            if not any(re.search(pattern, image_url) for pattern in allowed_domains) or any(re.search(pattern, image_url) for pattern in blocked_patterns):
+            if not self.is_allowed(image_url, allowed_domains, blocked_patterns):
                 print("❌ [Blocked]")
-                continue  # Skip downloading
+                continue
 
             response = requests.get(image_url)
             if response.status_code == 404:
                 break
-            
+
             image_path = os.path.join(self.OUTPUT_DIR, f"{chapter}_{i+1}{self.IMAGE_EXTENSION}")
             with open(image_path, "wb") as f:
                 f.write(response.content)
@@ -195,30 +233,18 @@ class MangaDownloader:
             for meta in soup.find_all("meta", attrs={"property": "og:image"}):
                 img_src = meta.get("content", "").strip()
                 if img_src.startswith("http") and img_src not in image_links:
-                    image_links.append(img_src)  # No modifications
+                    image_links.append(img_src)
 
-            # for i in image_links:
-            #     print(i)
-            #     print()
-
-            if(len(image_links) <= 5):
+            if len(image_links) <= 5:
                 print("Not enough images found, rejecting")
                 for i in image_links:
-                    print("  "+i)
+                    print("  " + i)
                 image_links = []
 
             return image_links
         except requests.RequestException as e:
             print(f"Error downloading the page: {e}")
             return []
-
-    # def get_aspect_ratio(self, image_path):
-    #     with Image.open(image_path) as img:
-    #         width, height = img.size
-    #         ratio_gcd = gcd(width, height)
-    #         aspect_width = width // ratio_gcd
-    #         aspect_height = height // ratio_gcd
-    #         return f"{aspect_width}:{aspect_height}"
 
     def get_last_chapter(self):
         if os.path.exists(self.LAST_CHAPTER_FILE):
@@ -231,25 +257,18 @@ class MangaDownloader:
         return p_tag.get_text(strip=True) if p_tag else soup.title.string
 
     def get_url(self, chapter):
-        # return self.BASE_URL.format(chapter) 
         return self.get_url_from_table_of_contents(chapter)
-    
+
     def get_url_from_table_of_contents(self, chapter):
-        # Download the page content
         response = requests.get(self.TABLE_OF_CONTENTS_URL)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        # Parse the page with BeautifulSoup
+        response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
-        # Search for all hyperlinks
         links = soup.find_all('a', href=True)
-        # Construct the chapter string to match
         chapter_str = f"one-piece-chapter-{chapter}"
-        # Search for the chapter in the hyperlinks
         for link in links:
             href = link['href']
             if chapter_str in href:
-                return href  # Return the first matching URL
-        # If no match is found, return None or raise an exception
+                return href
         return None
 
     def images_to_pdf(self, image_paths, output_pdf):
@@ -257,10 +276,16 @@ class MangaDownloader:
         images[0].save(output_pdf, "PDF", resolution=100.0, save_all=True, append_images=images[1:])
 
     def save_last_chapter(self, chapter):
+        if chapter is None:
+            print("⚠️ Chapter is None, not saving.")
+            return
+
         last_chapter = self.get_last_chapter()
-        if last_chapter is None or chapter > last_chapter:
+
+        if last_chapter is None or int(chapter) > int(last_chapter):
             print(f"Saving last chapter as {chapter}...")
             with open(self.LAST_CHAPTER_FILE, "w") as f:
                 f.write(str(chapter))
         else:
             print(f"Keeping chapter already saved as {last_chapter}...")
+
