@@ -256,20 +256,24 @@ class MangaDownloader:
         return None
 
     def get_title(self, soup, chapter=None):
-        meta = soup.find("meta", attrs={"property": "og:description"})
-        
-        if meta and meta.get("content"):
-            content = meta["content"]
+        metas = soup.find_all("meta", attrs={"property": "og:description"})
 
-            # 🔧 Fix HTML entities like &nbsp;
+        for meta in metas:
+            content = meta.get("content", "")
+            if not content:
+                continue
+
+            # normalize
             content = content.replace('\xa0', ' ')
             content = content.strip()
-
-            # Optional: normalize multiple spaces
             content = re.sub(r'\s+', ' ', content)
 
+            # only accept real chapter titles
+            if "One Piece Chapter" not in content:
+                continue
+
             match = re.search(
-                r"(One Piece Chapter\s+\d+)(?:\s*-\s*(.*))?",
+                r"(One Piece Chapter\s+\d+)(?:\s*[-–]\s*(.*))?",
                 content,
                 re.IGNORECASE
             )
@@ -279,14 +283,15 @@ class MangaDownloader:
                 subtitle = match.group(2)
 
                 if subtitle:
-                    return f"{base} - {subtitle.strip()}"
+                    return f"{base} – {subtitle.strip()}"  # use nice dash
                 return base
 
+        # fallback
         if chapter:
             return f"One Piece Chapter {chapter}"
 
         return "One Piece Chapter"
-
+        
     def get_url(self, chapter):
         return self.get_url_from_table_of_contents(chapter)
 
