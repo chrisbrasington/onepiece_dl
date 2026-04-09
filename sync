@@ -2,7 +2,7 @@
 
 # Define the sync destination and device IP
 syncDestination="remote"
-deviceIp="192.168.0.41"
+deviceIp="192.168.0.43"
 
 # Mount the remote directory using sshfs
 sshfs root@$deviceIp:/mnt/onboard $syncDestination
