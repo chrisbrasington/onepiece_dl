@@ -170,45 +170,45 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
         await interaction.edit_original_response(content='Uploading chapter...')
 
         # ------------------------
-        # 1. Upload PDF
+        # Prepare files
         # ------------------------
-        file_name = os.path.basename(path)
+        files = []
 
+        # PDF
         try:
-            with open(path, "rb") as f:
-                await interaction.followup.send(
-                    f'# {trim_title}\n{url}',
-                    file=discord.File(f, file_name),
-                    suppress_embeds=True
-                )
+            files.append(discord.File(path, filename=os.path.basename(path)))
         except Exception as e:
-            print(f"PDF upload failed: {e}")
+            print(f"PDF load failed: {e}")
+
+        # First image only
+        try:
+            first_image = images[0]
+
+            if os.path.getsize(first_image) > 2 * 1024 * 1024:
+                first_image = await convert_and_compress_image(first_image)
+
+            files.insert(0, discord.File(first_image))  # put image first (optional)
+        except Exception as e:
+            print(f"Image load failed: {e}")
+
+        # ------------------------
+        # Upload once
+        # ------------------------
+        if files:
             await interaction.followup.send(
-                f'# {trim_title}\n(no pdf)\n{url}',
+                f'# {trim_title}\n{url}',
+                files=files,
+                suppress_embeds=True
+            )
+        else:
+            await interaction.followup.send(
+                f'# {trim_title}\n(no files uploaded)\n{url}',
                 suppress_embeds=True
             )
 
         # ------------------------
-        # 2. Upload ONLY first image
+        # Cleanup + state
         # ------------------------
-        first_image = images[0]
-
-        # compress if needed
-        if os.path.getsize(first_image) > 2 * 1024 * 1024:
-            first_image = await convert_and_compress_image(first_image)
-
-        try:
-            await interaction.followup.send(
-                f'# {trim_title}\nPreview (1/{len(images)})',
-                file=discord.File(first_image)
-            )
-        except Exception as e:
-            print(f"First image upload failed: {e}")
-
-        # ------------------------
-        # 3. STOP HERE (no spoilers)
-        # ------------------------
-
         bot.downloader.delete_images()
         bot.downloader.save_last_chapter(chapter)
 
@@ -219,7 +219,7 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
         await interaction.edit_original_response(
             content=f"❌ Failed to download{' chapter ' + str(chapter) if chapter else ' from URL'}"
         )
-
+        
 @tree.command(name="napier", description="Check if Merphy Napier has a video for a specific One Piece chapter")
 @app_commands.describe(chapter="The chapter number to check (optional)")
 async def check_napier_video(interaction: discord.Interaction, chapter: int = None):

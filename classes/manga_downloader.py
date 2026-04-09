@@ -256,16 +256,24 @@ class MangaDownloader:
         return None
 
     def get_title(self, soup, chapter=None):
-        # Try og:description first
         meta = soup.find("meta", attrs={"property": "og:description"})
         
         if meta and meta.get("content"):
-            content = meta["content"].strip()
+            content = meta["content"]
 
-            # Example:
-            # "One Piece Chapter 1179 - Nerona Imu Descends"
-            match = re.search(r"(One Piece Chapter\s+\d+)(?:\s*-\s*(.*))?", content, re.IGNORECASE)
-            
+            # 🔧 Fix HTML entities like &nbsp;
+            content = content.replace('\xa0', ' ')
+            content = content.strip()
+
+            # Optional: normalize multiple spaces
+            content = re.sub(r'\s+', ' ', content)
+
+            match = re.search(
+                r"(One Piece Chapter\s+\d+)(?:\s*-\s*(.*))?",
+                content,
+                re.IGNORECASE
+            )
+
             if match:
                 base = match.group(1)
                 subtitle = match.group(2)
@@ -274,11 +282,9 @@ class MangaDownloader:
                     return f"{base} - {subtitle.strip()}"
                 return base
 
-        # Fallback: use chapter number if provided
         if chapter:
             return f"One Piece Chapter {chapter}"
 
-        # Absolute fallback (should rarely happen)
         return "One Piece Chapter"
 
     def get_url(self, chapter):
