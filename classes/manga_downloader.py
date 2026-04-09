@@ -258,6 +258,8 @@ class MangaDownloader:
     def get_title(self, soup, chapter=None):
         metas = soup.find_all("meta", attrs={"property": "og:description"})
 
+        print(metas)
+
         for meta in metas:
             content = meta.get("content", "")
             if not content:
@@ -291,7 +293,7 @@ class MangaDownloader:
             return f"One Piece Chapter {chapter}"
 
         return "One Piece Chapter"
-        
+
     def get_url(self, chapter):
         return self.get_url_from_table_of_contents(chapter)
 
