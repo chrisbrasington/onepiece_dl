@@ -58,7 +58,8 @@ class MangaDownloader:
             r"cdn\.onepiecechapters\.com",
             r"([a-z0-9]+)\.wp\.com",  # Regex for any subdomain of wp.com
             r"cdn",
-            r"wp-content"
+            r"wp-content",
+            r"nangca\.com"
         ]
 
         blocked_patterns = [
