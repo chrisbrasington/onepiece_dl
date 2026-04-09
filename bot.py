@@ -196,7 +196,7 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
         # ------------------------
         if files:
             await interaction.followup.send(
-                f'# {trim_title}\n{url}',
+                f'# [{trim_title}]({url})',
                 files=files,
                 suppress_embeds=True
             )
@@ -219,7 +219,7 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
         await interaction.edit_original_response(
             content=f"❌ Failed to download{' chapter ' + str(chapter) if chapter else ' from URL'}"
         )
-        
+
 @tree.command(name="napier", description="Check if Merphy Napier has a video for a specific One Piece chapter")
 @app_commands.describe(chapter="The chapter number to check (optional)")
 async def check_napier_video(interaction: discord.Interaction, chapter: int = None):
