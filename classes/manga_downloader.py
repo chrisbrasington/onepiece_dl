@@ -258,7 +258,7 @@ class MangaDownloader:
     def get_title(self, soup, chapter=None):
         metas = soup.find_all("meta", attrs={"property": "og:description"})
 
-        print(metas)
+        best_match = None
 
         for meta in metas:
             content = meta.get("content", "")
@@ -270,10 +270,11 @@ class MangaDownloader:
             content = content.strip()
             content = re.sub(r'\s+', ' ', content)
 
-            # only accept real chapter titles
-            if "One Piece Chapter" not in content:
+            # ✅ MUST start with chapter (this is the key fix)
+            if not content.lower().startswith("one piece chapter"):
                 continue
 
+            # match full title
             match = re.search(
                 r"(One Piece Chapter\s+\d+)(?:\s*[-–]\s*(.*))?",
                 content,
@@ -284,11 +285,16 @@ class MangaDownloader:
                 base = match.group(1)
                 subtitle = match.group(2)
 
+                # ✅ Prefer one WITH subtitle
                 if subtitle:
-                    return f"{base} – {subtitle.strip()}"  # use nice dash
-                return base
+                    return f"{base} – {subtitle.strip()}"
 
-        # fallback
+                # fallback if no better one found
+                best_match = base
+
+        if best_match:
+            return best_match
+
         if chapter:
             return f"One Piece Chapter {chapter}"
 
