@@ -102,7 +102,9 @@ class MangaDownloader:
             return None, []
 
         output_pdf = os.path.join(self.OUTPUT_DIR, f"one piece - {chapter}.pdf")
-        self.images_to_pdf(images_on_disk, output_pdf)
+        preview_path = os.path.join(self.OUTPUT_DIR, f"one piece - {chapter} preview.png")
+        self.images_to_pdf(images_on_disk, output_pdf, preview_image=preview_path)
+
         print(f"Chapter {chapter} downloaded as PDF: {output_pdf}")
 
         if delete_images:
@@ -315,9 +317,21 @@ class MangaDownloader:
                 return href
         return None
 
-    def images_to_pdf(self, image_paths, output_pdf):
-        images = [Image.open(image_path).convert("L") for image_path in image_paths]
+    def images_to_pdf(self, image_paths, output_pdf, preview_image=None):
+        """
+        Convert images to a PDF. Optionally save the first page as a preview image.
+        """
+        # Open images in RGB so the preview looks correct
+        images = [Image.open(p).convert("RGB") for p in image_paths]
+
+        # Save PDF
         images[0].save(output_pdf, "PDF", resolution=100.0, save_all=True, append_images=images[1:])
+        print(f"PDF saved: {output_pdf}")
+
+        # Save first page as preview
+        if preview_image and images:
+            images[0].save(preview_image, "PNG")
+            print(f"Preview image saved: {preview_image}")
 
     def save_last_chapter(self, chapter):
         if chapter is None:
