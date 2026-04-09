@@ -148,46 +148,77 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
     await interaction.response.defer(ephemeral=True, thinking=True)
 
     try:
-        manga_title = bot.downloader.download_and_get_title(url)
+        manga_title = bot.downloader.download_and_get_title(url, chapter)
         trim_title = re.sub(r' - One Piece Manga Online$', '', manga_title)
 
         if chapter:
             path, images = bot.downloader.download_chapter(chapter, delete_images=False)
         else:
             output_name = trim_title.replace(" ", "_").lower()
-            path, images = bot.downloader.download_from_url(url, output_name=output_name, delete_images=False)
+            path, images = bot.downloader.download_from_url(
+                url,
+                output_name=output_name,
+                delete_images=False
+            )
 
-        if path is None or not images:            
-            await interaction.edit_original_response(content=f'Chapter {chapter} may not yet be released, check back next Sunday')
-            #await interaction.user.send(f'Chapter {chapter} may not yet be released, check back next Sunday')
+        if path is None or not images:
+            await interaction.edit_original_response(
+                content=f'Chapter {chapter} may not yet be released, check back next Sunday'
+            )
             return
 
-        await interaction.edit_original_response(content=f'Uploading chapter...')
+        await interaction.edit_original_response(content='Uploading chapter...')
 
+        # ------------------------
+        # 1. Upload PDF
+        # ------------------------
         file_name = os.path.basename(path)
+
         try:
             with open(path, "rb") as f:
-                await interaction.followup.send(f'# {trim_title}\n{url}',
-                                                file=discord.File(f, file_name),
-                                                suppress_embeds=True)
+                await interaction.followup.send(
+                    f'# {trim_title}\n{url}',
+                    file=discord.File(f, file_name),
+                    suppress_embeds=True
+                )
         except Exception as e:
             print(f"PDF upload failed: {e}")
-            await interaction.followup.send(f'# {trim_title}\n(no pdf)\n{url}', suppress_embeds=True)
+            await interaction.followup.send(
+                f'# {trim_title}\n(no pdf)\n{url}',
+                suppress_embeds=True
+            )
 
-        if images:
-            await interaction.followup.send(f'# {trim_title}\n1/{len(images)}',
-                                            file=discord.File(images[0]))
-            await upload_images(interaction, images, trim_title)
+        # ------------------------
+        # 2. Upload ONLY first image
+        # ------------------------
+        first_image = images[0]
+
+        # compress if needed
+        if os.path.getsize(first_image) > 2 * 1024 * 1024:
+            first_image = await convert_and_compress_image(first_image)
+
+        try:
+            await interaction.followup.send(
+                f'# {trim_title}\nPreview (1/{len(images)})',
+                file=discord.File(first_image)
+            )
+        except Exception as e:
+            print(f"First image upload failed: {e}")
+
+        # ------------------------
+        # 3. STOP HERE (no spoilers)
+        # ------------------------
 
         bot.downloader.delete_images()
-        print(f"Chapter {'from URL' if not chapter else chapter} uploaded successfully")
-
-        # if greater than last chapter, save
         bot.downloader.save_last_chapter(chapter)
+
+        print(f"Chapter {'from URL' if not chapter else chapter} uploaded successfully")
 
     except Exception as e:
         print(f"Error during download: {e}")
-        await interaction.edit_original_response(content=f"❌ Failed to download{' chapter ' + str(chapter) if chapter else ' from URL'}")
+        await interaction.edit_original_response(
+            content=f"❌ Failed to download{' chapter ' + str(chapter) if chapter else ' from URL'}"
+        )
 
 @tree.command(name="napier", description="Check if Merphy Napier has a video for a specific One Piece chapter")
 @app_commands.describe(chapter="The chapter number to check (optional)")

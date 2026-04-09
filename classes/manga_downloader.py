@@ -25,13 +25,15 @@ class MangaDownloader:
             if file.endswith(self.IMAGE_EXTENSION):
                 os.remove(os.path.join(self.OUTPUT_DIR, file))
 
-    def download_and_get_title(self, url):
+    def download_and_get_title(self, url, chapter=None):
         response = requests.get(url)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
-        print(self.get_title(soup))
-        return self.get_title(soup)
 
+        title = self.get_title(soup, chapter)
+        print(title)
+        return title    
+    
     # -------------------------------
     # 🔑 Helper: Domain filtering
     # -------------------------------
@@ -252,9 +254,31 @@ class MangaDownloader:
                 return int(f.read().strip())
         return None
 
-    def get_title(self, soup):
-        p_tag = soup.find('p', class_='text-center text-text-muted font-bold mt-2')
-        return p_tag.get_text(strip=True) if p_tag else soup.title.string
+    def get_title(self, soup, chapter=None):
+        # Try og:description first
+        meta = soup.find("meta", attrs={"property": "og:description"})
+        
+        if meta and meta.get("content"):
+            content = meta["content"].strip()
+
+            # Example:
+            # "One Piece Chapter 1179 - Nerona Imu Descends"
+            match = re.search(r"(One Piece Chapter\s+\d+)(?:\s*-\s*(.*))?", content, re.IGNORECASE)
+            
+            if match:
+                base = match.group(1)
+                subtitle = match.group(2)
+
+                if subtitle:
+                    return f"{base} - {subtitle.strip()}"
+                return base
+
+        # Fallback: use chapter number if provided
+        if chapter:
+            return f"One Piece Chapter {chapter}"
+
+        # Absolute fallback (should rarely happen)
+        return "One Piece Chapter"
 
     def get_url(self, chapter):
         return self.get_url_from_table_of_contents(chapter)
