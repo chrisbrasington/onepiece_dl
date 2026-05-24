@@ -333,6 +333,54 @@ class MangaDownloader:
             images[0].save(preview_image, "PNG")
             print(f"Preview image saved: {preview_image}")
 
+    def compress_pdf_to_size(self, image_paths, output_pdf, max_bytes):
+        """
+        Rebuild a PDF from source images, shrinking until it fits under max_bytes.
+        Lowers JPEG quality first, then downscales as a fallback.
+        Returns True if the result fits, False otherwise.
+        """
+        if not image_paths:
+            return False
+
+        # (quality, scale) passes — progressively more aggressive
+        passes = [
+            (85, 1.0), (75, 1.0), (65, 1.0), (55, 1.0),
+            (75, 0.85), (65, 0.85), (55, 0.85),
+            (65, 0.7), (55, 0.7), (45, 0.7),
+            (55, 0.55), (45, 0.55), (35, 0.55),
+        ]
+
+        import tempfile, shutil
+
+        for quality, scale in passes:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                processed = []
+                for i, p in enumerate(image_paths):
+                    img = Image.open(p).convert("RGB")
+                    if scale < 1.0:
+                        new_size = (max(1, int(img.width * scale)),
+                                    max(1, int(img.height * scale)))
+                        img = img.resize(new_size, Image.LANCZOS)
+                    jpg_path = os.path.join(tmpdir, f"page_{i:04d}.jpg")
+                    img.save(jpg_path, "JPEG", quality=quality, optimize=True)
+                    processed.append(jpg_path)
+
+                pil_pages = [Image.open(p).convert("RGB") for p in processed]
+                pil_pages[0].save(
+                    output_pdf, "PDF",
+                    resolution=100.0,
+                    save_all=True,
+                    append_images=pil_pages[1:],
+                )
+
+            size = os.path.getsize(output_pdf)
+            print(f"Compression pass quality={quality} scale={scale}: "
+                  f"{size / (1024 * 1024):.2f}MB")
+            if size <= max_bytes:
+                return True
+
+        return False
+
     def save_last_chapter(self, chapter):
         if chapter is None:
             print("⚠️ Chapter is None, not saving.")

@@ -174,9 +174,29 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
         # ------------------------
         files = []
 
+        # PDF — compress if it exceeds Discord's free upload limit (10MB).
+        discord_free_limit = 10 * 1024 * 1024
+        safe_target = int(discord_free_limit * 0.95)  # leave headroom
+
+        pdf_size = os.path.getsize(path)
+        if pdf_size > discord_free_limit:
+            print(f"PDF is {pdf_size / (1024 * 1024):.2f}MB — compressing under "
+                  f"{safe_target / (1024 * 1024):.2f}MB...")
+            await interaction.edit_original_response(
+                content='Compressing PDF for upload...'
+            )
+            fit = bot.downloader.compress_pdf_to_size(images, path, safe_target)
+            new_size = os.path.getsize(path)
+            print(f"Compressed PDF: {new_size / (1024 * 1024):.2f}MB "
+                  f"({'fits' if fit else 'still too large'})")
+
         # PDF
         try:
-            files.append(discord.File(path, filename=os.path.basename(path)))
+            if os.path.getsize(path) <= discord_free_limit:
+                files.append(discord.File(path, filename=os.path.basename(path)))
+            else:
+                print(f"Skipping PDF attachment — still over "
+                      f"{discord_free_limit / (1024 * 1024):.0f}MB after compression.")
         except Exception as e:
             print(f"PDF load failed: {e}")
 

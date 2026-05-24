@@ -1,0 +1,10 @@
+services:
+  one-piece-bot:
+    build: .
+    image: valhall:5000/one-piece-bot:latest
+    container_name: one-piece-bot
+    restart: always
+    environment:
+      TZ: America/Denver
+    volumes:
+      - ./last_chapter.txt:/app/last_chapter.txt
