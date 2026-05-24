@@ -336,49 +336,84 @@ class MangaDownloader:
     def compress_pdf_to_size(self, image_paths, output_pdf, max_bytes):
         """
         Rebuild a PDF from source images, shrinking until it fits under max_bytes.
-        Lowers JPEG quality first, then downscales as a fallback.
+        Decodes each source image once, resizes in parallel, and writes the PDF
+        directly from in-memory images (no on-disk JPEG round-trip).
         Returns True if the result fits, False otherwise.
         """
         if not image_paths:
             return False
 
-        # (quality, scale) passes — progressively more aggressive
+        import time
+        from concurrent.futures import ThreadPoolExecutor
+
+        def mb(n):
+            return f"{n / (1024 * 1024):.2f}MB"
+
+        # (max_width_px, jpeg_quality) — least aggressive first.
         passes = [
-            (85, 1.0), (75, 1.0), (65, 1.0), (55, 1.0),
-            (75, 0.85), (65, 0.85), (55, 0.85),
-            (65, 0.7), (55, 0.7), (45, 0.7),
-            (55, 0.55), (45, 0.55), (35, 0.55),
+            (1600, 75),
+            (1400, 65),
+            (1200, 60),
+            (1100, 50),
+            (1000, 45),
+            (900,  40),
+            (800,  35),
         ]
 
-        import tempfile, shutil
+        target_mb = mb(max_bytes)
+        original_mb = mb(os.path.getsize(output_pdf)) if os.path.exists(output_pdf) else "?"
+        print(f"[compress] start: pages={len(image_paths)} "
+              f"original={original_mb} target<={target_mb}")
 
-        for quality, scale in passes:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                processed = []
-                for i, p in enumerate(image_paths):
-                    img = Image.open(p).convert("RGB")
-                    if scale < 1.0:
-                        new_size = (max(1, int(img.width * scale)),
-                                    max(1, int(img.height * scale)))
-                        img = img.resize(new_size, Image.LANCZOS)
-                    jpg_path = os.path.join(tmpdir, f"page_{i:04d}.jpg")
-                    img.save(jpg_path, "JPEG", quality=quality, optimize=True)
-                    processed.append(jpg_path)
+        t0 = time.monotonic()
+        originals = [Image.open(p).convert("RGB") for p in image_paths]
+        print(f"[compress] decoded {len(originals)} pages "
+              f"in {time.monotonic() - t0:.1f}s")
 
-                pil_pages = [Image.open(p).convert("RGB") for p in processed]
-                pil_pages[0].save(
-                    output_pdf, "PDF",
-                    resolution=100.0,
-                    save_all=True,
-                    append_images=pil_pages[1:],
-                )
+        cached_pages = None
+        cached_width = None
 
+        for i, (max_width, quality) in enumerate(passes, start=1):
+            print(f"[compress] pass {i}/{len(passes)} "
+                  f"max_width={max_width} quality={quality}")
+
+            if max_width != cached_width:
+                def resize_one(img, mw=max_width):
+                    if img.width <= mw:
+                        return img
+                    ratio = mw / img.width
+                    new_size = (mw, max(1, int(img.height * ratio)))
+                    return img.resize(new_size, Image.LANCZOS)
+
+                t = time.monotonic()
+                with ThreadPoolExecutor() as ex:
+                    cached_pages = list(ex.map(resize_one, originals))
+                cached_width = max_width
+                print(f"[compress]   resized to {max_width}px wide "
+                      f"in {time.monotonic() - t:.1f}s")
+            else:
+                print(f"[compress]   reusing {max_width}px resized pages")
+
+            t = time.monotonic()
+            cached_pages[0].save(
+                output_pdf, "PDF",
+                resolution=100.0,
+                save_all=True,
+                append_images=cached_pages[1:],
+                quality=quality,
+            )
+            write_s = time.monotonic() - t
             size = os.path.getsize(output_pdf)
-            print(f"Compression pass quality={quality} scale={scale}: "
-                  f"{size / (1024 * 1024):.2f}MB")
+            print(f"[compress]   wrote PDF in {write_s:.1f}s → {mb(size)}")
+
             if size <= max_bytes:
+                print(f"[compress] fits target ({mb(size)} <= {target_mb}) "
+                      f"after pass {i}, total {time.monotonic() - t0:.1f}s")
                 return True
 
+        print(f"[compress] exhausted all {len(passes)} passes; "
+              f"final size {mb(os.path.getsize(output_pdf))} still over "
+              f"{target_mb} (total {time.monotonic() - t0:.1f}s)")
         return False
 
     def save_last_chapter(self, chapter):

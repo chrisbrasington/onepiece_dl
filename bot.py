@@ -3,7 +3,7 @@ import discord
 from discord import app_commands
 from googleapiclient.discovery import build
 from classes.manga_downloader import MangaDownloader
-import json, os, re
+import asyncio, json, os, re
 from PIL import Image
 
 # Function to check if Merphy Napier has a video for the chapter
@@ -185,7 +185,9 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
             await interaction.edit_original_response(
                 content='Compressing PDF for upload...'
             )
-            fit = bot.downloader.compress_pdf_to_size(images, path, safe_target)
+            fit = await asyncio.to_thread(
+                bot.downloader.compress_pdf_to_size, images, path, safe_target
+            )
             new_size = os.path.getsize(path)
             print(f"Compressed PDF: {new_size / (1024 * 1024):.2f}MB "
                   f"({'fits' if fit else 'still too large'})")
