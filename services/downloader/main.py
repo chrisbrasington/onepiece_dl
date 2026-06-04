@@ -136,6 +136,9 @@ def wait_with_reactivity(storage, delay, chunk=60.0):
 def run_pass(storage, downloader, max_catchup):
     serve_requests(storage, downloader)
     check_new(storage, downloader, max_catchup)
+    # Heartbeat: record that we polled, so consumers (e.g. the Homepage widget)
+    # can show when the downloader last looked for chapters.
+    storage.save_last_check()
 
 
 def main():

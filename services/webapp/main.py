@@ -67,6 +67,20 @@ def api_requests():
     return {"pending": storage.pending_requests()}
 
 
+@app.get("/api/stats")
+def api_stats():
+    """Library status for dashboards (e.g. Homepage's Custom API widget)."""
+    chapters = storage.list_chapters()
+    newest_meta = storage.read_meta(chapters[-1]) if chapters else {}
+    return {
+        "last_chapter": storage.get_last_chapter(),
+        "file_count": len(chapters),
+        "downloaded_at": (newest_meta or {}).get("downloaded_at"),
+        "pending_requests": len(storage.pending_requests()),
+        "last_check": storage.get_last_check(),
+    }
+
+
 @app.post("/api/request/{chapter}")
 def api_request(chapter: int):
     result = enqueue_request(storage, chapter)

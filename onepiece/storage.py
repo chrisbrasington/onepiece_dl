@@ -41,6 +41,7 @@ class Storage:
         self.requests_dir = os.path.join(self.root, "requests")
         self.work_dir = os.path.join(self.root, "work")
         self.last_chapter_file = os.path.join(self.root, "last_chapter.txt")
+        self.last_check_file = os.path.join(self.root, "last_check.txt")
         for d in (self.pdf_dir, self.discord_dir, self.preview_dir, self.meta_dir,
                   self.requests_dir, self.work_dir):
             os.makedirs(d, exist_ok=True)
@@ -111,6 +112,22 @@ class Storage:
         if last is None or int(chapter) > int(last):
             with open(self.last_chapter_file, "w") as f:
                 f.write(str(int(chapter)))
+
+    # ----- last-check state (downloader poll heartbeat) -------------------
+    def get_last_check(self):
+        """ISO timestamp of the downloader's most recent poll pass, or None."""
+        if os.path.exists(self.last_check_file):
+            try:
+                return open(self.last_check_file).read().strip() or None
+            except OSError:
+                return None
+        return None
+
+    def save_last_check(self, when=None):
+        """Record that the downloader just polled. Defaults to now (UTC)."""
+        when = when or datetime.now(timezone.utc)
+        with open(self.last_check_file, "w") as f:
+            f.write(when.isoformat() if hasattr(when, "isoformat") else str(when))
 
     # ----- expected next release (manual schedule override) ---------------
     @property
