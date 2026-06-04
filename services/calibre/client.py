@@ -264,6 +264,10 @@ class CalibreWebClient:
         try:
             csrf = self._csrf(self.session.get(edit_url, timeout=30).text)
             data = {
+                # The edit form's field is "title" (UI label "Book Title").
+                # Also send "book_title" in case a fork uses that name — unknown
+                # form fields are ignored.
+                "title": title,
                 "book_title": title,
                 "authors": os.environ.get("CALIBRE_AUTHOR", "Eiichiro Oda"),
                 "series": os.environ.get("CALIBRE_SERIES", "One Piece"),
