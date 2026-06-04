@@ -18,7 +18,9 @@ import sys
 from datetime import date, datetime
 
 from .storage import Storage, Reconciler
-from .downloader import MangaDownloader
+# Heavy/per-container deps (MangaDownloader needs Pillow; CalibreWebClient runs in
+# the calibre container) are imported lazily inside the commands that use them, so
+# this module loads in any container.
 
 
 def cmd_request(args):
@@ -34,6 +36,7 @@ def cmd_request(args):
         print(f"chapter {args.chapter} already present (use --force to re-download)")
         return 0
 
+    from .downloader import MangaDownloader
     downloader = MangaDownloader(storage)
     pdf, _ = downloader.download_chapter(args.chapter)
     if not pdf:
@@ -113,6 +116,41 @@ def cmd_reprocess(args):
     return 0
 
 
+def cmd_retitle(args):
+    """Re-apply title/series/author/tags to books already in Calibre-Web, in place
+    (no re-upload, no duplicates). Fixes books uploaded before the metadata fix."""
+    from .calibre import CalibreWebClient
+
+    storage = Storage()
+    client = CalibreWebClient()
+    if not client.login():
+        print("calibre login failed; check CALIBRE_URL/USERNAME/PASSWORD")
+        return 1
+
+    books = client.list_existing_books()
+    if books is None:
+        print("could not read the calibre library via OPDS")
+        return 1
+
+    fixed = skipped = noid = 0
+    for b in books:
+        ch, bid, cur = b["chapter"], b["book_id"], b["title"]
+        if bid is None:
+            noid += 1
+            continue
+        meta = storage.read_meta(ch) or {}
+        desired = meta.get("title") or f"One Piece Chapter {ch}"
+        if cur.strip() == desired.strip():
+            skipped += 1
+            continue
+        if client.set_metadata(bid, desired, ch):
+            print(f"  retitled book {bid}: '{cur}' -> '{desired}'")
+            fixed += 1
+    print(f"retitle done: {fixed} updated, {skipped} already correct, "
+          f"{noid} without a book id")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="opctl",
@@ -127,6 +165,7 @@ def main(argv=None):
             "  opctl schedule --clear         revert to the automatic heuristic\n"
             "  opctl reprocess 1183           re-post + re-upload a corrected chapter\n"
             "  opctl reprocess 1183 --calibre re-upload to Calibre-Web only\n"
+            "  opctl retitle                  fix titles/metadata of books already in Calibre-Web\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -177,6 +216,17 @@ def main(argv=None):
     rep.add_argument("--bot", action="store_true", help="re-post via the bot")
     rep.add_argument("--calibre", action="store_true", help="re-upload to Calibre-Web")
     rep.set_defaults(func=cmd_reprocess)
+
+    ret = sub.add_parser(
+        "retitle",
+        help="fix title/metadata of books already in Calibre-Web (in place)",
+        description="Walk the Calibre-Web library (via OPDS) and re-apply the "
+                    "title/series/author/tags to each One Piece book in place — no "
+                    "re-upload, no duplicates. Fixes books uploaded before the "
+                    "metadata field was corrected. Titles come from each chapter's "
+                    "stored metadata, falling back to 'One Piece Chapter N'.",
+    )
+    ret.set_defaults(func=cmd_retitle)
 
     args = parser.parse_args(argv)
     if not args.command:

@@ -7,6 +7,6 @@ COPY services/calibre/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY onepiece ./onepiece
-COPY services/calibre/main.py services/calibre/client.py ./
+COPY services/calibre/main.py ./
 
 CMD ["python", "main.py"]

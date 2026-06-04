@@ -136,13 +136,20 @@ class CalibreWebClient:
                 return urljoin(current_url, link["href"])
         return None
 
-    def _collect_chapters_from_feed(self, path, auth, max_pages=60):
-        """Walk an OPDS feed (following rel="next" pagination) and collect every
-        chapter number found in entry titles. Returns a set on success (possibly
-        empty = feed worked but no matching books), or None if the endpoint isn't
-        a usable feed."""
+    def _entry_book_id(self, entry):
+        """The Calibre book id from an entry's download/cover link, or None."""
+        for link in entry.find_all("link"):
+            m = re.search(r"/opds/(?:download|cover)/(\d+)", link.get("href", ""))
+            if m:
+                return int(m.group(1))
+        return None
+
+    def _collect_books_from_feed(self, path, auth, max_pages=60):
+        """Walk an OPDS feed (following rel="next" pagination) and collect a record
+        {chapter, book_id, title} per matching entry. Returns a list on success
+        (possibly empty), or None if the endpoint isn't a usable feed."""
         url = self._url(path)
-        found = set()
+        records = []
         pages = 0
         seen = set()
         while url and pages < max_pages and url not in seen:
@@ -157,33 +164,41 @@ class CalibreWebClient:
             soup = BeautifulSoup(resp.text, "html.parser")
             for entry in soup.find_all("entry"):
                 num = chapter_number_from(entry.get_text(" "))
-                if num is not None:
-                    found.add(num)
+                if num is None:
+                    continue
+                title_tag = entry.find("title")
+                records.append({
+                    "chapter": num,
+                    "book_id": self._entry_book_id(entry),
+                    "title": title_tag.get_text().strip() if title_tag else "",
+                })
             url = self._next_feed_link(soup, url)
             pages += 1
-        print(f"[calibre] OPDS {path}: {len(found)} chapters across {pages} page(s)")
-        return found
+        print(f"[calibre] OPDS {path}: {len(records)} chapters across {pages} page(s)")
+        return records
 
-    def existing_chapter_numbers(self):
-        """Chapter numbers already in the library (via OPDS), or None if OPDS
-        couldn't be read (caller then relies on local reconcile state). An empty
-        set is a valid answer: the library has no matching chapters."""
+    def list_existing_books(self):
+        """List {chapter, book_id, title} for matching books in the library, or
+        None if OPDS couldn't be read. An empty list is a valid answer."""
         auth = (self.username, self.password) if self.username else None
         series = os.environ.get("CALIBRE_SERIES", "One Piece")
         # Prefer a series-scoped search (fewer pages), then fall back to the full
         # catalog. Each is paginated. First usable feed wins.
-        candidates = [
-            f"/opds/search/{quote(series)}",
-            "/opds/books",
-            "/opds/new",
-        ]
-        for path in candidates:
-            result = self._collect_chapters_from_feed(path, auth)
-            if result is not None:
-                return result
+        for path in (f"/opds/search/{quote(series)}", "/opds/books", "/opds/new"):
+            records = self._collect_books_from_feed(path, auth)
+            if records is not None:
+                return records
         print("[calibre] could not enumerate existing books via OPDS; "
               "relying on local reconcile state")
         return None
+
+    def existing_chapter_numbers(self):
+        """Chapter numbers already in the library (via OPDS), or None if OPDS
+        couldn't be read. An empty set is a valid answer."""
+        books = self.list_existing_books()
+        if books is None:
+            return None
+        return {b["chapter"] for b in books}
 
     # -- upload + metadata --------------------------------------------------
     def _fetch_csrf(self, path="/"):

@@ -14,13 +14,10 @@ Env:
 """
 
 import os
-import sys
 import time
 
 from onepiece.storage import Storage, Reconciler
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from client import CalibreWebClient
+from onepiece.calibre import CalibreWebClient
 
 try:
     from dotenv import load_dotenv

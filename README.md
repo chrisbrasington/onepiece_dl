@@ -138,6 +138,8 @@ Run from the repo dir on valhalla (talks to the running downloader container):
 ./opctl reprocess 1183           # re-post AND re-upload a corrected chapter
 ./opctl reprocess 1183 --calibre # re-upload to Calibre-Web only
 ./opctl reprocess 1183 --bot     # re-post to Discord only
+
+./opctl retitle                  # fix titles/metadata of books already in Calibre-Web
 ```
 
 The download lands in storage immediately, so the webapp shows it right away and
@@ -157,6 +159,11 @@ after fixing a bad PDF with `request <n> --force` (which refreshes disk + webapp
 but won't re-trigger the bot/calibre on its own). Caveats: the bot posts a **new**
 message (delete the old with `/delete`), and Calibre-Web doesn't de-dupe, so
 delete the old book there first or you'll get a duplicate.
+
+`retitle` walks the Calibre-Web library (OPDS) and re-applies title/series/author/
+tags to each book **in place** — no re-upload, no duplicates. Use it to fix books
+that were uploaded before a metadata change. Titles come from each chapter's stored
+metadata, falling back to "One Piece Chapter N".
 
 ## PDF handling
 
