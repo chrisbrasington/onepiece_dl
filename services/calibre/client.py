@@ -91,6 +91,22 @@ class CalibreWebClient:
             print(f"[calibre] login appears to have failed (final url {resp.url})")
         return self._logged_in
 
+    def _ensure_logged_in(self):
+        """Re-login if the session has gone stale (it can run idle for days).
+        Probes a login-required page and re-authenticates if bounced to /login."""
+        try:
+            resp = self.session.get(self._url("/me"), timeout=30, allow_redirects=True)
+        except requests.RequestException:
+            return self.login()
+        # Not authed if we were redirected to the login page (or it's unauthorized).
+        if resp.status_code in (401, 403) or "/login" in urlparse(resp.url).path:
+            print("[calibre] session expired; re-logging in")
+            return self.login()
+        return True
+
+    def _looks_like_auth_failure(self, resp):
+        return resp.status_code in (401, 403) or "/login" in urlparse(resp.url).path
+
     # -- inventory ----------------------------------------------------------
     def existing_chapter_numbers(self):
         """Set of chapter numbers already in the library (via OPDS), or None if
@@ -154,25 +170,33 @@ class CalibreWebClient:
         m = re.search(r"/(?:book|admin/book)/(\d+)", resp.text)
         return int(m.group(1)) if m else None
 
-    def upload(self, pdf_path, title):
-        """Upload a PDF under a clean title. Returns the new book id, or None."""
-        if not self._logged_in and not self.login():
-            return None
+    def _post_upload(self, named_path):
+        csrf = self._fetch_csrf("/")  # fresh token each attempt
+        with open(named_path, "rb") as fh:
+            files = {self.upload_field: (os.path.basename(named_path), fh, "application/pdf")}
+            data = {"csrf_token": csrf} if csrf else {}
+            return self.session.post(
+                self._url("/upload"), files=files, data=data, timeout=300,
+                headers=self._csrf_headers(csrf),
+            )
 
-        upload_url = self._url("/upload")
-        csrf = self._fetch_csrf("/")
+    def upload(self, pdf_path, title):
+        """Upload a PDF under a clean title. Returns the new book id, or None.
+        Re-logs-in if the (possibly days-idle) session has expired."""
+        if not self._ensure_logged_in():
+            return None
 
         tmpdir = tempfile.mkdtemp()
         try:
             named = os.path.join(tmpdir, safe_filename(title) + ".pdf")
             shutil.copyfile(pdf_path, named)
-            with open(named, "rb") as fh:
-                files = {self.upload_field: (os.path.basename(named), fh, "application/pdf")}
-                data = {"csrf_token": csrf} if csrf else {}
-                resp = self.session.post(
-                    upload_url, files=files, data=data, timeout=300,
-                    headers=self._csrf_headers(csrf),
-                )
+            resp = self._post_upload(named)
+            # Backstop: if the session lapsed between the probe and the POST, the
+            # upload comes back as an auth failure — re-login and retry once.
+            if self._looks_like_auth_failure(resp):
+                print("[calibre] upload was unauthenticated; re-logging in and retrying")
+                if self.login():
+                    resp = self._post_upload(named)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
