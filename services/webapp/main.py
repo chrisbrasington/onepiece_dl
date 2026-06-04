@@ -75,6 +75,13 @@ def api_request(chapter: int):
     return result
 
 
+@app.delete("/api/request/{chapter}")
+def api_cancel_request(chapter: int):
+    """Revoke a queued request (e.g. a chapter that failed or doesn't exist)."""
+    storage.clear_request(chapter)
+    return {"status": "cancelled", "chapter": chapter}
+
+
 # --- files -----------------------------------------------------------------
 @app.get("/preview/{chapter}")
 def preview(chapter: int):

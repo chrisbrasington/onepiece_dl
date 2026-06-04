@@ -27,7 +27,11 @@
   .req button:hover{filter:brightness(1.08)}
   #pending{display:flex;gap:.4rem;flex-wrap:wrap;padding:.6rem 1.2rem 0}
   .chip{background:#241f10;border:1px solid #3a3115;color:var(--straw);
-    border-radius:999px;padding:.2rem .6rem;font-size:.8rem}
+    border-radius:999px;padding:.2rem .6rem;font-size:.8rem;
+    display:inline-flex;align-items:center;gap:.35rem}
+  .chip-x{background:none;border:0;color:var(--straw);cursor:pointer;
+    font-size:.85rem;line-height:1;padding:0;opacity:.6}
+  .chip-x:hover{opacity:1;color:#fff}
   main{padding:1.2rem;display:grid;gap:1.1rem;
     grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
@@ -113,8 +117,14 @@ async function loadPending(){
   const res = await fetch('/api/requests');
   const {pending} = await res.json();
   pendingEl.innerHTML = pending && pending.length
-    ? 'Requested: ' + pending.map(n=>`<span class="chip">#${n}</span>`).join('')
+    ? 'Requested: ' + pending.map(n=>`<span class="chip">#${n}<button class="chip-x" title="Cancel request" onclick="cancelRequest(${n})">✕</button></span>`).join(' ')
     : '';
+}
+
+async function cancelRequest(n){
+  const res = await fetch(`/api/request/${n}`, {method:'DELETE'});
+  toast(res.ok ? `Cancelled request #${n}` : 'Cancel failed');
+  loadPending();
 }
 
 document.getElementById('reqForm').addEventListener('submit', async (e)=>{
