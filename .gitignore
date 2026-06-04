@@ -4,6 +4,9 @@ dev
 archive
 *.log
 *.txt
+# ...but always track dependency manifests
+!requirements.txt
+!**/requirements.txt
 remote
 .venv
 bot_token.txt
