@@ -62,6 +62,12 @@ def get_channel_id():
     return int(cid) if cid else None
 
 
+def get_admin_id():
+    """User id allowed to run admin commands (e.g. /delete). From ADMIN_ID."""
+    aid = os.environ.get("ADMIN_ID")
+    return int(aid) if aid else None
+
+
 # Function to check if Merphy Napier has a video for the chapter
 def check_one_piece_chapter_video(api_key, chapter_number):
     # YouTube channel ID for Merphy Napier
@@ -415,6 +421,52 @@ async def download_chapter(interaction: discord.Interaction, chapter: int):
 async def download_from_url(interaction: discord.Interaction, url: str):
     print(f"Direct URL given: {url}")
     await handle_download(interaction, url)
+
+
+@tree.command(name="delete", description="Delete one of the bot's messages by id (admin only)")
+@app_commands.describe(message_id="The message id to delete (must be a message the bot sent)")
+async def delete_message(interaction: discord.Interaction, message_id: str):
+    # message_id is a string: Discord snowflakes exceed JS/JSON safe-int range,
+    # so an integer option would corrupt the value.
+    await interaction.response.defer(ephemeral=True, thinking=True)
+
+    admin_id = get_admin_id()
+    if admin_id is None or interaction.user.id != admin_id:
+        await interaction.followup.send("Not authorized.", ephemeral=True)
+        return
+
+    try:
+        mid = int(message_id)
+    except ValueError:
+        await interaction.followup.send("Invalid message id.", ephemeral=True)
+        return
+
+    channel = interaction.channel
+    if channel is None:
+        await interaction.followup.send("Run this in the channel containing the message.", ephemeral=True)
+        return
+
+    try:
+        msg = await channel.fetch_message(mid)
+    except discord.NotFound:
+        await interaction.followup.send("Message not found in this channel.", ephemeral=True)
+        return
+    except discord.Forbidden:
+        await interaction.followup.send("I can't access that message.", ephemeral=True)
+        return
+
+    # Safety: only delete the bot's own messages.
+    if msg.author.id != interaction.client.user.id:
+        await interaction.followup.send("That message isn't from me — refusing to delete.", ephemeral=True)
+        return
+
+    try:
+        await msg.delete()
+        await interaction.followup.send(f"Deleted message {mid}.", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.followup.send("I don't have permission to delete that message.", ephemeral=True)
+    except discord.HTTPException as e:
+        await interaction.followup.send(f"Delete failed: {e}", ephemeral=True)
 
 
 if __name__ == "__main__":

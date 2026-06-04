@@ -33,7 +33,7 @@ marker in `requests/`, which the downloader fulfills.
 | Service          | What it does                                                        |
 |------------------|---------------------------------------------------------------------|
 | `downloader`     | Polls for new chapters (adaptive schedule), fulfills webapp requests, writes pdf/preview/metadata. |
-| `bot`            | Discord bot. Auto-posts new chapters to a channel; `/check`, `/chapter`, `/url`, `/napier` commands. |
+| `bot`            | Discord bot. Auto-posts new chapters to a channel; `/check`, `/chapter`, `/url`, `/napier`, `/delete` (admin) commands. |
 | `calibre-uploader` | Uploads chapter PDFs to Calibre-Web over HTTP; backfills what's missing on startup. |
 | `webapp`         | Cover grid, in-browser reader, PDF download, request-missing-chapter. |
 
@@ -55,6 +55,7 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
 | `DISCORD_GUILD_ID` | bot | command sync |
 | `DISCORD_CHANNEL_ID` | bot | channel to auto-post into; unset disables auto-post |
 | `YOUTUBE_API_KEY` | bot | for `/napier` |
+| `ADMIN_ID` | bot | your Discord user id; only this user may run `/delete` |
 | `BOT_POLL_INTERVAL` | bot | seconds between auto-post checks (default 60) |
 | `BOT_POST_BACKLOG` | bot | set to post the existing backlog on first run |
 | `START_CHAPTER` | downloader | first chapter to try when `last_chapter.txt` is empty |
