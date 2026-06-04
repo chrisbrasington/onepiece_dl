@@ -92,19 +92,22 @@ def cmd_reprocess(args):
               f"(use 'request {args.chapter}' to fetch it first)")
         return 1
 
+    unmarked = []
     for name in targets:
         r = Reconciler(storage, name)
         if r.is_done(args.chapter):
             r.unmark(args.chapter)
+            unmarked.append(name)
             print(f"un-marked chapter {args.chapter} for {name}; "
                   f"it will re-process on the next pass")
         else:
-            print(f"chapter {args.chapter} wasn't marked for {name} (nothing to do)")
+            print(f"chapter {args.chapter} isn't marked for {name} yet — it's "
+                  f"already pending, so {name} will handle it on its next pass")
 
-    if "calibre" in targets:
+    if "calibre" in unmarked:
         print("note: Calibre-Web does not de-dupe — delete the old book there "
               "first, or you'll get a duplicate.")
-    if "bot" in targets:
+    if "bot" in unmarked:
         print("note: the bot will post a NEW message — delete the old one with "
               "/delete if you want.")
     return 0
@@ -170,7 +173,7 @@ def main(argv=None):
                     "Calibre-Web does not de-dupe, so delete the old book there "
                     "first or you'll get a duplicate.",
     )
-    rep.add_argument("chapter", type=int)
+    rep.add_argument("chapter", type=int, help="chapter number, e.g. 1183")
     rep.add_argument("--bot", action="store_true", help="re-post via the bot")
     rep.add_argument("--calibre", action="store_true", help="re-upload to Calibre-Web")
     rep.set_defaults(func=cmd_reprocess)
