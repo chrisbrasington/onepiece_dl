@@ -6,6 +6,50 @@ from classes.manga_downloader import MangaDownloader
 import asyncio, json, os, re
 from PIL import Image
 
+# Load .env if present (no-op if python-dotenv isn't installed or no .env exists)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Secrets / config: prefer environment variables, fall back to legacy files so
+# existing deployments keep working until they migrate to .env. Once .env is in
+# place you can delete bot_token.txt / youtube.txt / config.json.
+# ---------------------------------------------------------------------------
+def _legacy_file(path):
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return f.read().strip()
+    return None
+
+
+def get_bot_token():
+    token = os.environ.get("DISCORD_BOT_TOKEN") or _legacy_file("bot_token.txt")
+    if not token:
+        raise RuntimeError("No bot token: set DISCORD_BOT_TOKEN or provide bot_token.txt")
+    return token
+
+
+def get_youtube_api_key():
+    key = os.environ.get("YOUTUBE_API_KEY") or _legacy_file("youtube.txt")
+    if not key:
+        raise RuntimeError("No YouTube key: set YOUTUBE_API_KEY or provide youtube.txt")
+    return key
+
+
+def get_guild_id():
+    guild_id = os.environ.get("DISCORD_GUILD_ID")
+    if guild_id:
+        return int(guild_id)
+    raw = _legacy_file("config.json")
+    if raw:
+        return json.loads(raw)["guild_id"]
+    return None
+
+
 # Function to check if Merphy Napier has a video for the chapter
 def check_one_piece_chapter_video(api_key, chapter_number):
     # YouTube channel ID for Merphy Napier
@@ -115,13 +159,13 @@ class MangaBotClient(discord.Client):
         await self.wait_until_ready()
         if not self.synced:
 
-            # get config from config.json
-            with open("config.json", "r") as f:
-                config = json.load(f)
+            guild_id = get_guild_id()
+            guild = self.get_guild(guild_id) if guild_id else None
 
-            guild = self.get_guild(config['guild_id'])
-
-            print(f'Syncing commands to {guild.name}...')
+            if guild:
+                print(f'Syncing commands to {guild.name}...')
+            else:
+                print('No guild id configured; doing global sync only.')
 
             # await tree.sync(guild=guild)
             await tree.sync()  # For global sync
@@ -247,9 +291,7 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
 async def check_napier_video(interaction: discord.Interaction, chapter: int = None):
     await interaction.response.defer(ephemeral=False, thinking=True)  # Defer the response to avoid timeouts
 
-    # Load the YouTube API key from youtube.txt
-    with open("youtube.txt", "r") as f:
-        api_key = f.read().strip()
+    api_key = get_youtube_api_key()
 
     if chapter is None:
         chapter = bot.downloader.get_last_chapter()
@@ -288,7 +330,4 @@ async def download_from_url(interaction: discord.Interaction, url: str):
 
 
 # Run the bot with your token
-with open("bot_token.txt", "r") as f:
-    token = f.read().strip()
-
-bot.run(token)
+bot.run(get_bot_token())

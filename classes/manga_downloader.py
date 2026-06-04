@@ -20,9 +20,14 @@ class MangaDownloader:
         if not os.path.exists(self.OUTPUT_DIR):
             os.makedirs(self.OUTPUT_DIR)
 
+    # Matches downloaded page images ("1161_10.png", "onepiece_1.jpeg") and the
+    # bot's "_compressed.jpg" temp files. Does NOT match the chapter PDFs or the
+    # "one piece - N preview.png" cover previews (no "_<digit>" before the ext).
+    PAGE_IMAGE_RE = re.compile(r"_\d+(?:_compressed)?\.(?:jpe?g|png)$", re.IGNORECASE)
+
     def delete_images(self):
         for file in os.listdir(self.OUTPUT_DIR):
-            if file.endswith(self.IMAGE_EXTENSION):
+            if self.PAGE_IMAGE_RE.search(file):
                 os.remove(os.path.join(self.OUTPUT_DIR, file))
 
     def download_and_get_title(self, url, chapter=None):

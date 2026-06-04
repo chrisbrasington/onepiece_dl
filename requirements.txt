@@ -4,3 +4,4 @@ fpdf
 beautifulsoup4
 discord
 google-api-python-client
+python-dotenv

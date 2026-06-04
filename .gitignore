@@ -7,6 +7,7 @@ remote
 .venv
 bot_token.txt
 config.json
+.env
 # Ignore Python bytecode files
 *.pyc
 
