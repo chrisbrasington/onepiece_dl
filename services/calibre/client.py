@@ -29,7 +29,26 @@ try:  # we intentionally parse OPDS (XML) with html.parser to avoid an lxml dep
 except ImportError:
     pass
 
-CHAPTER_RE = re.compile(r"chapter\s+(\d+)", re.IGNORECASE)
+# Pull a chapter number out of an OPDS entry. Calibre-Web titles our books
+# "one piece - 1176" (from the filename) and carries a "One Piece [1176]" series
+# index in the entry content — match either, series index first (most reliable).
+SERIES_INDEX_RE = re.compile(r"one piece\s*\[(\d+)\]", re.IGNORECASE)
+TITLE_PATTERNS = [
+    re.compile(r"chapter\s+(\d+)", re.IGNORECASE),       # "One Piece Chapter 1176"
+    re.compile(r"one piece\s*[-–]\s*(\d+)", re.IGNORECASE),  # "one piece - 1176"
+]
+
+
+def chapter_number_from(text):
+    """Extract a chapter number from an OPDS entry's text, or None."""
+    m = SERIES_INDEX_RE.search(text or "")
+    if m:
+        return int(m.group(1))
+    for pat in TITLE_PATTERNS:
+        m = pat.search(text or "")
+        if m:
+            return int(m.group(1))
+    return None
 
 
 def safe_filename(title):
@@ -136,10 +155,10 @@ class CalibreWebClient:
             if not resp.ok or ("<feed" not in resp.text and "<entry" not in resp.text):
                 return None  # not an OPDS feed at this endpoint
             soup = BeautifulSoup(resp.text, "html.parser")
-            for t in soup.find_all("title"):
-                m = CHAPTER_RE.search(t.get_text() or "")
-                if m:
-                    found.add(int(m.group(1)))
+            for entry in soup.find_all("entry"):
+                num = chapter_number_from(entry.get_text(" "))
+                if num is not None:
+                    found.add(num)
             url = self._next_feed_link(soup, url)
             pages += 1
         print(f"[calibre] OPDS {path}: {len(found)} chapters across {pages} page(s)")
