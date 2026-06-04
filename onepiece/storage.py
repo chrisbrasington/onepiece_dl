@@ -33,18 +33,25 @@ class Storage:
     def __init__(self, root=None):
         self.root = root or DEFAULT_ROOT
         self.pdf_dir = os.path.join(self.root, "pdfs")
+        self.discord_dir = os.path.join(self.root, "discord_pdfs")
         self.preview_dir = os.path.join(self.root, "previews")
         self.meta_dir = os.path.join(self.root, "meta")
         self.requests_dir = os.path.join(self.root, "requests")
         self.work_dir = os.path.join(self.root, "work")
         self.last_chapter_file = os.path.join(self.root, "last_chapter.txt")
-        for d in (self.pdf_dir, self.preview_dir, self.meta_dir,
+        for d in (self.pdf_dir, self.discord_dir, self.preview_dir, self.meta_dir,
                   self.requests_dir, self.work_dir):
             os.makedirs(d, exist_ok=True)
 
     # ----- paths -----------------------------------------------------------
     def pdf_path(self, chapter):
         return os.path.join(self.pdf_dir, f"one piece - {chapter}.pdf")
+
+    def discord_pdf_path(self, chapter):
+        """Optional size-reduced copy for Discord's upload limit. Only created by
+        the downloader when the full PDF is too large; otherwise consumers fall
+        back to pdf_path()."""
+        return os.path.join(self.discord_dir, f"one piece - {chapter}.pdf")
 
     def preview_path(self, chapter):
         return os.path.join(self.preview_dir, f"{chapter}.png")
@@ -55,6 +62,12 @@ class Storage:
     # ----- chapter inventory ----------------------------------------------
     def has_chapter(self, chapter):
         return os.path.exists(self.pdf_path(chapter))
+
+    def best_pdf(self, chapter):
+        """The Discord-sized copy if the downloader made one, else the full PDF.
+        The returned path may not exist if the chapter was never downloaded."""
+        dp = self.discord_pdf_path(chapter)
+        return dp if os.path.exists(dp) else self.pdf_path(chapter)
 
     def list_chapters(self):
         """Chapters with a PDF present, ascending."""
