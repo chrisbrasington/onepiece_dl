@@ -67,7 +67,8 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
 | `CALIBRE_POLL_INTERVAL` | calibre | seconds between watch passes (default 300) |
 | `CALIBRE_UPLOAD_FIELD` | calibre | upload form field name if your CW version differs (default `btn-upload`) |
 | `CALIBRE_AUTHOR` / `CALIBRE_SERIES` / `CALIBRE_TAGS` | calibre | metadata defaults |
-| `ONEPIECE_STORAGE` | all | storage root (set to `/data` in containers) |
+| `STORAGE_PATH` | compose | host dir bind-mounted to `/data` (default `./data`); where PDFs + `last_chapter.txt` live on the host |
+| `ONEPIECE_STORAGE` | all | storage root *inside* the container (set to `/data`; don't change) |
 | `WEBAPP_PORT` | webapp | container listen port (default 8080) |
 
 ## Deploying on valhalla
@@ -92,10 +93,12 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
    `webapp.ports`). Change it there if it clashes.
 
 4. **Seed the starting chapter** (first run only). Either set `START_CHAPTER` in
-   `.env` before step 3, or write it into the volume:
+   `.env` before step 3, or write it into the storage dir on the host:
    ```bash
-   docker compose exec downloader sh -c 'echo 1185 > /data/last_chapter.txt'
+   echo 1185 > "${STORAGE_PATH:-./data}/last_chapter.txt"
    ```
+   (`STORAGE_PATH` is bind-mounted to `/data`, so the host file and the
+   container's `/data/last_chapter.txt` are the same file.)
 
 ### Notes
 - `CALIBRE_URL` must be reachable *from inside the container*. Calibre-Web runs on

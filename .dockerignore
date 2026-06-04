@@ -11,6 +11,7 @@ archive
 remote
 # runtime data — never copy into images
 storage
+data
 manga_chapters
 last_chapter.txt
 PLAN.md
