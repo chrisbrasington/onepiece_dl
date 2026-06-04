@@ -48,18 +48,37 @@ def cmd_request(args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="opctl")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(
+        prog="opctl",
+        description="Control the running One Piece pipeline from the host.",
+        epilog=(
+            "examples:\n"
+            "  opctl request 1180             download chapter 1180 now\n"
+            "  opctl request 1180 --no-post   download it, but the bot won't post it\n"
+            "  opctl request 1180 --force     re-download even if already on disk\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = parser.add_subparsers(dest="command", metavar="<command>")
 
-    req = sub.add_parser("request", help="download a chapter now")
-    req.add_argument("chapter", type=int)
+    req = sub.add_parser(
+        "request",
+        help="download a chapter now (calibre + bot react)",
+        description="Download a chapter immediately. It lands in the shared "
+                    "storage, so the webapp shows it right away and calibre (and "
+                    "the bot, unless --no-post) pick it up on their next pass.",
+    )
+    req.add_argument("chapter", type=int, help="chapter number, e.g. 1180")
     req.add_argument("--no-post", action="store_true",
-                     help="download but mark it so the bot doesn't post it")
+                     help="download but mark it so the bot doesn't post it (calibre still uploads)")
     req.add_argument("--force", action="store_true",
                      help="re-download even if already on disk")
     req.set_defaults(func=cmd_request)
 
     args = parser.parse_args(argv)
+    if not args.command:
+        parser.print_help()
+        return 0
     return args.func(args)
 
 
