@@ -99,7 +99,7 @@ services:
       - homepage.group=Media
       - homepage.name=One Piece Library
       - homepage.icon=mdi-book-open-page-variant
-      - homepage.href=http://valhalla:8680
+      - homepage.href=https://onepiece.home.chrisincode.com
       - homepage.description=Browse, read & download chapters
       - homepage.widget.type=customapi
       - homepage.widget.url=http://one-piece-webapp:8080/api/stats
