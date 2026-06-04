@@ -58,6 +58,7 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
 | `ADMIN_ID` | bot | your Discord user id; only this user may run `/delete` |
 | `BOT_POLL_INTERVAL` | bot | seconds between auto-post checks (default 60) |
 | `BOT_POST_BACKLOG` | bot | set to post the existing backlog on first run |
+| `WEBAPP_REQUEST_POST` | downloader | by default, chapters fulfilled from the request queue (webapp "Request" / `opctl`) are treated as backfill and the bot does **not** post them. Set to `1` to post them too. |
 | `START_CHAPTER` | downloader | first chapter to try when `last_chapter.txt` is empty |
 | `MAX_CATCHUP` | downloader | max chapters to grab per pass (default 3) |
 | `ALLOWED_IMAGE_HOSTS` | downloader | extra image source hosts to accept, comma/space-separated (e.g. `mangaclash.com newsite.org`) — for when a source rotates to a new CDN |
@@ -140,8 +141,10 @@ Run from the repo dir on valhalla (talks to the running downloader container):
 ```
 
 The download lands in storage immediately, so the webapp shows it right away and
-calibre (and the bot, unless `--no-post`) pick it up on their next pass. The
-webapp's "Request" box does the same thing via the request queue.
+calibre picks it up on its next pass. Chapters fulfilled from the **request queue**
+(the webapp's "Request" box) are treated as backfill and are **not** posted to
+Discord by default — set `WEBAPP_REQUEST_POST=1` to change that. (`opctl request`
+posts unless you pass `--no-post`.)
 
 `schedule` sets the expected next release **as `YYYY-MM-DD`** (e.g. `2026-06-07`).
 Past dates are rejected and dates more than a month out warn. The downloader idles

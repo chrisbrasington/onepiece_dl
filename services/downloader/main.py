@@ -21,7 +21,7 @@ import os
 import time
 from datetime import datetime, timezone
 
-from onepiece.storage import Storage
+from onepiece.storage import Storage, Reconciler
 from onepiece.downloader import MangaDownloader
 from onepiece.release_schedule import (
     ScheduleConfig,
@@ -46,11 +46,19 @@ def latest_release_time(storage):
 
 def serve_requests(storage, downloader):
     """Fulfill webapp-requested chapters. Successful ones are cleared; failures
-    are left in the queue to retry on a later pass."""
+    are left in the queue to retry on a later pass.
+
+    By default a queued (webapp) request does NOT trigger a Discord post — it's
+    treated as a backfill. Set WEBAPP_REQUEST_POST=1 to let the bot post them."""
+    post_requested = bool(os.environ.get("WEBAPP_REQUEST_POST"))
     for ch in storage.pending_requests():
         if storage.has_chapter(ch):
             storage.clear_request(ch)
             continue
+        if not post_requested:
+            # Mark the bot done BEFORE the PDF appears so its poll can't catch it
+            # first. Calibre is left unmarked, so it still uploads the chapter.
+            Reconciler(storage, "bot").mark(ch)
         print(f"[request] downloading requested chapter {ch}")
         try:
             pdf, _ = downloader.download_chapter(ch)
