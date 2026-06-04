@@ -62,7 +62,7 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
 | `CHECK_INTERVAL_IDLE` / `CHECK_INTERVAL_WINDOW` / `CHECK_INTERVAL_LONGBREAK` | downloader | poll cadences, seconds (default 86400 / 3600 / 21600) |
 | `WINDOW_START_DAYS` / `LONG_BREAK_DAYS` | downloader | schedule thresholds (default 6 / 14) |
 | `DISCORD_PDF_LIMIT` | downloader | bytes; build a shrunk PDF copy above this (default ~9.5MB) |
-| `CALIBRE_URL` | calibre | e.g. `http://valhalla:8083` |
+| `CALIBRE_URL` | calibre | host-published Calibre-Web; from a container use `http://host.docker.internal:8083` (or the host LAN IP), not the host's hostname |
 | `CALIBRE_USERNAME` / `CALIBRE_PASSWORD` | calibre | Calibre-Web login |
 | `CALIBRE_POLL_INTERVAL` | calibre | seconds between watch passes (default 300) |
 | `CALIBRE_UPLOAD_FIELD` | calibre | upload form field name if your CW version differs (default `btn-upload`) |
@@ -98,6 +98,10 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
    ```
 
 ### Notes
+- `CALIBRE_URL` must be reachable *from inside the container*. Calibre-Web runs on
+  the host, so use `http://host.docker.internal:8083` (compose maps host-gateway
+  for the uploader) — not the host's hostname, which won't resolve in a container.
+  If it still fails, use the host's LAN IP.
 - The Calibre-Web client drives the web UI (no real upload API), so upload field
   names / endpoints can vary by version. If uploads fail, check the logs and
   override `CALIBRE_UPLOAD_FIELD`; metadata-setting is best-effort.

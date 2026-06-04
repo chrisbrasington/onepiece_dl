@@ -59,6 +59,11 @@ services:
       ONEPIECE_STORAGE: /data
     volumes:
       - one_piece_storage:/data
+    # Calibre-Web runs on the host (published port 8083), not in this stack.
+    # host.docker.internal resolves to the host from inside the container, so
+    # set CALIBRE_URL=http://host.docker.internal:8083 in .env.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - downloader
     labels:
