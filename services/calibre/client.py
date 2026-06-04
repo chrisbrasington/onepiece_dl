@@ -16,7 +16,7 @@ import os
 import re
 import shutil
 import tempfile
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import warnings
 
@@ -108,31 +108,60 @@ class CalibreWebClient:
         return resp.status_code in (401, 403) or "/login" in urlparse(resp.url).path
 
     # -- inventory ----------------------------------------------------------
-    def existing_chapter_numbers(self):
-        """Set of chapter numbers already in the library (via OPDS), or None if
-        we couldn't read it (caller then relies on local reconcile state)."""
-        auth = (self.username, self.password) if self.username else None
-        # Try a few common OPDS list endpoints; stop at the first that parses.
-        for path in ("/opds/new", "/opds/books", "/opds/letter/all", "/opds"):
+    def _next_feed_link(self, soup, current_url):
+        """The rel="next" pagination link in an OPDS feed, absolute, or None."""
+        for link in soup.find_all("link"):
+            rel = link.get("rel")
+            rel = " ".join(rel) if isinstance(rel, list) else (rel or "")
+            if "next" in rel.lower() and link.get("href"):
+                return urljoin(current_url, link["href"])
+        return None
+
+    def _collect_chapters_from_feed(self, path, auth, max_pages=60):
+        """Walk an OPDS feed (following rel="next" pagination) and collect every
+        chapter number found in entry titles. Returns a set on success (possibly
+        empty = feed worked but no matching books), or None if the endpoint isn't
+        a usable feed."""
+        url = self._url(path)
+        found = set()
+        pages = 0
+        seen = set()
+        while url and pages < max_pages and url not in seen:
+            seen.add(url)
             try:
-                resp = self.session.get(self._url(path), auth=auth, timeout=30)
+                resp = self.session.get(url, auth=auth, timeout=30)
             except requests.RequestException as e:
-                print(f"[calibre] OPDS {path} error: {e}")
-                continue
-            if not resp.ok or "<feed" not in resp.text and "<entry" not in resp.text:
-                continue
-            found = set()
-            # html.parser handles the OPDS XML well enough to pull <title> tags,
-            # and avoids a hard dependency on lxml.
+                print(f"[calibre] OPDS {path} page {pages + 1} error: {e}")
+                return None
+            if not resp.ok or ("<feed" not in resp.text and "<entry" not in resp.text):
+                return None  # not an OPDS feed at this endpoint
             soup = BeautifulSoup(resp.text, "html.parser")
-            titles = [t.get_text() for t in soup.find_all("title")]
-            for title in titles:
-                m = CHAPTER_RE.search(title or "")
+            for t in soup.find_all("title"):
+                m = CHAPTER_RE.search(t.get_text() or "")
                 if m:
                     found.add(int(m.group(1)))
-            if found:
-                print(f"[calibre] OPDS {path}: found {len(found)} existing chapters")
-                return found
+            url = self._next_feed_link(soup, url)
+            pages += 1
+        print(f"[calibre] OPDS {path}: {len(found)} chapters across {pages} page(s)")
+        return found
+
+    def existing_chapter_numbers(self):
+        """Chapter numbers already in the library (via OPDS), or None if OPDS
+        couldn't be read (caller then relies on local reconcile state). An empty
+        set is a valid answer: the library has no matching chapters."""
+        auth = (self.username, self.password) if self.username else None
+        series = os.environ.get("CALIBRE_SERIES", "One Piece")
+        # Prefer a series-scoped search (fewer pages), then fall back to the full
+        # catalog. Each is paginated. First usable feed wins.
+        candidates = [
+            f"/opds/search/{quote(series)}",
+            "/opds/books",
+            "/opds/new",
+        ]
+        for path in candidates:
+            result = self._collect_chapters_from_feed(path, auth)
+            if result is not None:
+                return result
         print("[calibre] could not enumerate existing books via OPDS; "
               "relying on local reconcile state")
         return None
