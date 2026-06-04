@@ -90,6 +90,11 @@ services:
       - ${STORAGE_PATH:-./data}:/data
     depends_on:
       - downloader
+    networks:
+      # default keeps it on the stack's own network; homepage is a shared
+      # external network so the Homepage container can resolve this by name.
+      - default
+      - homepage
     labels:
       - homepage.group=Media
       - homepage.name=One Piece Library
@@ -108,3 +113,9 @@ services:
       - homepage.widget.mappings[3].label=Last Check
       - homepage.widget.mappings[3].field=last_check
       - homepage.widget.mappings[3].format=relativeDate
+
+networks:
+  # Shared with the Homepage stack so its container can resolve one-piece-webapp
+  # by name. Create once on the host: docker network create homepage
+  homepage:
+    external: true
