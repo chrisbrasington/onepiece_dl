@@ -19,6 +19,11 @@ services:
       ONEPIECE_STORAGE: /data
     volumes:
       - one_piece_storage:/data
+    labels:
+      - homepage.group=One Piece
+      - homepage.name=Downloader
+      - homepage.icon=mdi-download
+      - homepage.description=Fetches new chapters
 
   bot:
     build:
@@ -35,6 +40,11 @@ services:
       - one_piece_storage:/data
     depends_on:
       - downloader
+    labels:
+      - homepage.group=One Piece
+      - homepage.name=Discord Bot
+      - homepage.icon=discord
+      - homepage.description=Auto-posts chapters
 
   calibre-uploader:
     build:
@@ -51,6 +61,11 @@ services:
       - one_piece_storage:/data
     depends_on:
       - downloader
+    labels:
+      - homepage.group=One Piece
+      - homepage.name=Calibre Uploader
+      - homepage.icon=calibre-web
+      - homepage.description=Pushes chapters to Calibre-Web
 
   webapp:
     build:
@@ -70,6 +85,12 @@ services:
       - one_piece_storage:/data
     depends_on:
       - downloader
+    labels:
+      - homepage.group=Media
+      - homepage.name=One Piece Library
+      - homepage.icon=mdi-book-open-page-variant
+      - homepage.href=http://valhalla:8680
+      - homepage.description=Browse, read & download chapters
 
 volumes:
   one_piece_storage:
