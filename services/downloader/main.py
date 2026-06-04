@@ -94,7 +94,35 @@ def check_new(storage, downloader, max_catchup):
         fetched += 1
     if fetched:
         print(f"[check] fetched {fetched} new chapter(s)")
+        # A real release happened — drop any manual schedule override so we revert
+        # to the heuristic for the next one.
+        storage.clear_expected_release()
     return fetched
+
+
+def expected_release_dt(storage):
+    """The manual schedule override as an aware UTC datetime, or None."""
+    d = storage.get_expected_release()
+    if d is None:
+        return None
+    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+
+
+def wait_with_reactivity(storage, delay, chunk=60.0):
+    """Sleep up to `delay` seconds, but wake early if the schedule override or the
+    pending-request set changes, so the downloader reacts promptly to opctl."""
+    baseline_sched = storage.get_expected_release()
+    baseline_reqs = storage.pending_requests()
+    waited = 0.0
+    while waited < delay:
+        time.sleep(min(chunk, delay - waited))
+        waited += chunk
+        if storage.get_expected_release() != baseline_sched:
+            print("[downloader] schedule changed; re-checking now")
+            return
+        if storage.pending_requests() != baseline_reqs:
+            print("[downloader] request queue changed; re-checking now")
+            return
 
 
 def run_pass(storage, downloader, max_catchup):
@@ -108,6 +136,7 @@ def main():
     cfg = ScheduleConfig.from_env()
     max_catchup = int(os.environ.get("MAX_CATCHUP", "3"))
     run_once = bool(os.environ.get("RUN_ONCE"))
+    react_interval = float(os.environ.get("REACT_INTERVAL", "60"))
 
     print(f"[downloader] starting; storage={storage.root} run_once={run_once}")
     print(f"[downloader] schedule {cfg}")
@@ -121,11 +150,15 @@ def main():
 
         now = datetime.now(timezone.utc)
         last_rel = latest_release_time(storage)
-        delay = next_check_delay(now, last_rel, cfg)
-        expected = expected_next_release(last_rel)
-        print(f"[downloader] last_release={last_rel} expected_next~{expected} "
+        expected_dt = expected_release_dt(storage)
+        delay = next_check_delay(now, last_rel, cfg, expected_release=expected_dt)
+        if expected_dt:
+            exp_display = f"{expected_dt.date().isoformat()} (manual)"
+        else:
+            exp_display = expected_next_release(last_rel)
+        print(f"[downloader] last_release={last_rel} expected_next~{exp_display} "
               f"sleeping {delay}s ({delay / 3600:.1f}h)")
-        time.sleep(delay)
+        wait_with_reactivity(storage, delay, react_interval)
 
 
 if __name__ == "__main__":

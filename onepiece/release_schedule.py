@@ -44,11 +44,25 @@ class ScheduleConfig:
         )
 
 
-def next_check_delay(now, last_release, cfg=None):
-    """Seconds to sleep before the next check, given the current time and when we
-    last fetched a chapter (both timezone-aware datetimes). ``last_release`` may
-    be None (unknown state) -> poll at the window cadence to get oriented."""
+def next_check_delay(now, last_release, cfg=None, expected_release=None):
+    """Seconds to sleep before the next check. ``now``, ``last_release`` and
+    ``expected_release`` are timezone-aware datetimes.
+
+    If ``expected_release`` is set (a manual override, e.g. via opctl), it wins:
+    idle until ~a day before it, then poll at the window cadence until a chapter
+    lands, backing off only if it's long overdue. Otherwise fall back to the
+    last-release heuristic. ``last_release`` None -> window cadence to orient."""
     cfg = cfg or ScheduleConfig()
+
+    if expected_release is not None:
+        until_open = (expected_release - now).total_seconds() - 86400  # window opens ~1 day before
+        if until_open > 0:
+            return int(min(cfg.idle, max(60.0, until_open)))
+        overdue = (now - expected_release).total_seconds()
+        if overdue >= cfg.long_break_days * 86400:
+            return cfg.long_break
+        return cfg.window
+
     if last_release is None:
         return cfg.window
 

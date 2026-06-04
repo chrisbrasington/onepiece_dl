@@ -128,11 +128,21 @@ Run from the repo dir on valhalla (talks to the running downloader container):
 ./opctl request 1180             # download 1180 now; calibre + bot react
 ./opctl request 1180 --no-post   # download it, but the bot won't post it (calibre still uploads)
 ./opctl request 1180 --force     # re-download even if already on disk
+
+./opctl schedule 2026-06-07      # tell the downloader the next chapter is due Jun 7
+./opctl schedule                 # show the current expected date
+./opctl schedule --clear         # revert to the automatic heuristic
 ```
 
-The download lands in the shared volume immediately, so the webapp shows it right
-away and calibre (and the bot, unless `--no-post`) pick it up on their next pass.
-The webapp's "Request" box does the same thing via the request queue.
+The download lands in storage immediately, so the webapp shows it right away and
+calibre (and the bot, unless `--no-post`) pick it up on their next pass. The
+webapp's "Request" box does the same thing via the request queue.
+
+`schedule` sets the expected next release **as `YYYY-MM-DD`** (e.g. `2026-06-07`).
+Past dates are rejected and dates more than a month out warn. The downloader idles
+until about a day before, then polls hourly until the chapter lands, reacting to a
+schedule change within ~a minute; it clears the override automatically once a new
+chapter arrives. Useful after backfilling, when the heuristic's guess is off.
 
 ## PDF handling
 

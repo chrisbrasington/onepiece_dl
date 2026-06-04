@@ -15,6 +15,7 @@ their next pass.
 
 import argparse
 import sys
+from datetime import date, datetime
 
 from .storage import Storage, Reconciler
 from .downloader import MangaDownloader
@@ -47,6 +48,39 @@ def cmd_request(args):
     return 0
 
 
+def cmd_schedule(args):
+    storage = Storage()
+
+    if args.clear:
+        storage.clear_expected_release()
+        print("cleared manual schedule; reverting to the release heuristic")
+        return 0
+
+    if not args.date:
+        cur = storage.get_expected_release()
+        print(f"expected next release: {cur.isoformat() if cur else '(none set; using heuristic)'}")
+        return 0
+
+    try:
+        d = datetime.strptime(args.date, "%Y-%m-%d").date()
+    except ValueError:
+        print(f"invalid date '{args.date}'; use YYYY-MM-DD, e.g. 2026-06-07")
+        return 1
+
+    today = date.today()
+    if d < today:
+        print(f"{d.isoformat()} is in the past; refusing. Give a future date (YYYY-MM-DD).")
+        return 1
+
+    storage.set_expected_release(d)
+    out = f"expected next release set to {d.isoformat()}"
+    days = (d - today).days
+    if days > 31:
+        out += f"  (warning: {days} days out — that's over a month ahead)"
+    print(out)
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="opctl",
@@ -56,6 +90,9 @@ def main(argv=None):
             "  opctl request 1180             download chapter 1180 now\n"
             "  opctl request 1180 --no-post   download it, but the bot won't post it\n"
             "  opctl request 1180 --force     re-download even if already on disk\n"
+            "  opctl schedule 2026-06-07      expect the next chapter on Jun 7\n"
+            "  opctl schedule                 show the current expected date\n"
+            "  opctl schedule --clear         revert to the automatic heuristic\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -74,6 +111,23 @@ def main(argv=None):
     req.add_argument("--force", action="store_true",
                      help="re-download even if already on disk")
     req.set_defaults(func=cmd_request)
+
+    sch = sub.add_parser(
+        "schedule",
+        help="set/show/clear the expected next release date",
+        description="Set the date the next chapter is expected, as YYYY-MM-DD "
+                    "(e.g. 2026-06-07). The downloader idles until about a day "
+                    "before, then polls hourly until it lands, and reacts to the "
+                    "change within ~a minute. Past dates are rejected; a date more "
+                    "than a month out warns. It clears automatically once a new "
+                    "chapter is fetched. With no date it shows the current value; "
+                    "--clear reverts to the automatic heuristic.",
+    )
+    sch.add_argument("date", nargs="?",
+                     help="expected release date in YYYY-MM-DD form, e.g. 2026-06-07")
+    sch.add_argument("--clear", action="store_true",
+                     help="clear the manual date and use the heuristic")
+    sch.set_defaults(func=cmd_schedule)
 
     args = parser.parse_args(argv)
     if not args.command:

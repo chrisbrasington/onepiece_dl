@@ -20,7 +20,7 @@ Pillow/requests.
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 DEFAULT_ROOT = "storage"
 
@@ -111,6 +111,29 @@ class Storage:
         if last is None or int(chapter) > int(last):
             with open(self.last_chapter_file, "w") as f:
                 f.write(str(int(chapter)))
+
+    # ----- expected next release (manual schedule override) ---------------
+    @property
+    def _expected_file(self):
+        return os.path.join(self.root, "expected_next.txt")
+
+    def get_expected_release(self):
+        """Manually-set expected next release date (a datetime.date), or None.
+        Overrides the heuristic so the downloader polls around a known date."""
+        if os.path.exists(self._expected_file):
+            try:
+                return date.fromisoformat(open(self._expected_file).read().strip())
+            except (ValueError, OSError):
+                return None
+        return None
+
+    def set_expected_release(self, d):
+        with open(self._expected_file, "w") as f:
+            f.write(d.isoformat())
+
+    def clear_expected_release(self):
+        if os.path.exists(self._expected_file):
+            os.remove(self._expected_file)
 
     # ----- request queue (webapp -> downloader) ---------------------------
     def request_chapter(self, chapter):
