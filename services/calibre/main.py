@@ -42,6 +42,8 @@ def backfill(storage, reconciler, client):
 
 
 def upload_pending(storage, reconciler, client):
+    # Re-read state so opctl reprocess --calibre is honored without a restart.
+    reconciler.reload()
     pending = reconciler.pending()
     if not pending:
         return 0

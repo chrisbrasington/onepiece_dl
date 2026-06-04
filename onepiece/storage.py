@@ -199,6 +199,12 @@ class Reconciler:
         self.processed.add(int(chapter))
         self._save()
 
+    def unmark(self, chapter):
+        """Forget a chapter so this consumer handles it again (e.g. to re-post or
+        re-upload a corrected chapter)."""
+        self.processed.discard(int(chapter))
+        self._save()
+
     def mark_all_present(self):
         """Treat everything currently in storage as already handled (used to
         avoid re-posting/re-uploading the existing backlog on first run)."""

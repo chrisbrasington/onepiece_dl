@@ -81,6 +81,35 @@ def cmd_schedule(args):
     return 0
 
 
+def cmd_reprocess(args):
+    storage = Storage()
+    targets = [n for n, on in (("bot", args.bot), ("calibre", args.calibre)) if on]
+    if not targets:
+        targets = ["bot", "calibre"]
+
+    if not storage.has_chapter(args.chapter):
+        print(f"chapter {args.chapter} isn't on disk; nothing to re-process "
+              f"(use 'request {args.chapter}' to fetch it first)")
+        return 1
+
+    for name in targets:
+        r = Reconciler(storage, name)
+        if r.is_done(args.chapter):
+            r.unmark(args.chapter)
+            print(f"un-marked chapter {args.chapter} for {name}; "
+                  f"it will re-process on the next pass")
+        else:
+            print(f"chapter {args.chapter} wasn't marked for {name} (nothing to do)")
+
+    if "calibre" in targets:
+        print("note: Calibre-Web does not de-dupe — delete the old book there "
+              "first, or you'll get a duplicate.")
+    if "bot" in targets:
+        print("note: the bot will post a NEW message — delete the old one with "
+              "/delete if you want.")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="opctl",
@@ -93,6 +122,8 @@ def main(argv=None):
             "  opctl schedule 2026-06-07      expect the next chapter on Jun 7\n"
             "  opctl schedule                 show the current expected date\n"
             "  opctl schedule --clear         revert to the automatic heuristic\n"
+            "  opctl reprocess 1183           re-post + re-upload a corrected chapter\n"
+            "  opctl reprocess 1183 --calibre re-upload to Calibre-Web only\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -128,6 +159,21 @@ def main(argv=None):
     sch.add_argument("--clear", action="store_true",
                      help="clear the manual date and use the heuristic")
     sch.set_defaults(func=cmd_schedule)
+
+    rep = sub.add_parser(
+        "reprocess",
+        help="re-trigger the bot and/or calibre for an already-handled chapter",
+        description="Un-mark a chapter so a consumer handles it again on its next "
+                    "pass — e.g. after re-downloading a corrected PDF with "
+                    "'request <n> --force'. With no flag, does both. WARNINGS: the "
+                    "bot posts a NEW message (delete the old one with /delete); "
+                    "Calibre-Web does not de-dupe, so delete the old book there "
+                    "first or you'll get a duplicate.",
+    )
+    rep.add_argument("chapter", type=int)
+    rep.add_argument("--bot", action="store_true", help="re-post via the bot")
+    rep.add_argument("--calibre", action="store_true", help="re-upload to Calibre-Web")
+    rep.set_defaults(func=cmd_reprocess)
 
     args = parser.parse_args(argv)
     if not args.command:

@@ -133,6 +133,10 @@ Run from the repo dir on valhalla (talks to the running downloader container):
 ./opctl schedule 2026-06-07      # tell the downloader the next chapter is due Jun 7
 ./opctl schedule                 # show the current expected date
 ./opctl schedule --clear         # revert to the automatic heuristic
+
+./opctl reprocess 1183           # re-post AND re-upload a corrected chapter
+./opctl reprocess 1183 --calibre # re-upload to Calibre-Web only
+./opctl reprocess 1183 --bot     # re-post to Discord only
 ```
 
 The download lands in storage immediately, so the webapp shows it right away and
@@ -144,6 +148,12 @@ Past dates are rejected and dates more than a month out warn. The downloader idl
 until about a day before, then polls hourly until the chapter lands, reacting to a
 schedule change within ~a minute; it clears the override automatically once a new
 chapter arrives. Useful after backfilling, when the heuristic's guess is off.
+
+`reprocess` un-marks an already-handled chapter so a consumer redoes it — e.g.
+after fixing a bad PDF with `request <n> --force` (which refreshes disk + webapp
+but won't re-trigger the bot/calibre on its own). Caveats: the bot posts a **new**
+message (delete the old with `/delete`), and Calibre-Web doesn't de-dupe, so
+delete the old book there first or you'll get a duplicate.
 
 ## PDF handling
 
