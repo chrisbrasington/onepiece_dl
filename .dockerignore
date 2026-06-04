@@ -4,5 +4,13 @@ __pycache__/
 *.log
 *.sqlite3
 venv/
+.venv
 .env
 dev
+archive
+remote
+# runtime data — never copy into images
+storage
+manga_chapters
+last_chapter.txt
+PLAN.md

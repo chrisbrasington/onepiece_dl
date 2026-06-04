@@ -1,10 +1,75 @@
+# One Piece pipeline — one shared storage volume, four small services.
+# All config/secrets come from .env (see .env.example). Bring it all up with:
+#   docker compose up -d --build
+#
+# Storage layout lives under /data (the one_piece_storage volume), shared by
+# every service. The downloader produces; bot/calibre/webapp consume.
+
 services:
-  one-piece-bot:
-    build: .
+  downloader:
+    build:
+      context: .
+      dockerfile: services/downloader/Dockerfile
+    image: valhalla:5000/one-piece-downloader:latest
+    container_name: one-piece-downloader
+    restart: always
+    env_file: .env
+    environment:
+      TZ: America/Denver
+      ONEPIECE_STORAGE: /data
+    volumes:
+      - one_piece_storage:/data
+
+  bot:
+    build:
+      context: .
+      dockerfile: services/bot/Dockerfile
     image: valhalla:5000/one-piece-bot:latest
     container_name: one-piece-bot
     restart: always
+    env_file: .env
     environment:
       TZ: America/Denver
+      ONEPIECE_STORAGE: /data
     volumes:
-      - ./last_chapter.txt:/app/last_chapter.txt
+      - one_piece_storage:/data
+    depends_on:
+      - downloader
+
+  calibre-uploader:
+    build:
+      context: .
+      dockerfile: services/calibre/Dockerfile
+    image: valhalla:5000/one-piece-calibre:latest
+    container_name: one-piece-calibre
+    restart: always
+    env_file: .env
+    environment:
+      TZ: America/Denver
+      ONEPIECE_STORAGE: /data
+    volumes:
+      - one_piece_storage:/data
+    depends_on:
+      - downloader
+
+  webapp:
+    build:
+      context: .
+      dockerfile: services/webapp/Dockerfile
+    image: valhalla:5000/one-piece-webapp:latest
+    container_name: one-piece-webapp
+    restart: always
+    env_file: .env
+    environment:
+      TZ: America/Denver
+      ONEPIECE_STORAGE: /data
+      WEBAPP_PORT: 8080
+    ports:
+      - "8680:8080"   # host:container — change the host port to taste
+    volumes:
+      - one_piece_storage:/data
+    depends_on:
+      - downloader
+
+volumes:
+  one_piece_storage:
