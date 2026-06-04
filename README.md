@@ -60,6 +60,7 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
 | `BOT_POST_BACKLOG` | bot | set to post the existing backlog on first run |
 | `START_CHAPTER` | downloader | first chapter to try when `last_chapter.txt` is empty |
 | `MAX_CATCHUP` | downloader | max chapters to grab per pass (default 3) |
+| `ALLOWED_IMAGE_HOSTS` | downloader | extra image source hosts to accept, comma/space-separated (e.g. `mangaclash.com newsite.org`) — for when a source rotates to a new CDN |
 | `CHECK_INTERVAL_IDLE` / `CHECK_INTERVAL_WINDOW` / `CHECK_INTERVAL_LONGBREAK` | downloader | poll cadences, seconds (default 86400 / 3600 / 21600) |
 | `WINDOW_START_DAYS` / `LONG_BREAK_DAYS` | downloader | schedule thresholds (default 6 / 14) |
 | `DISCORD_PDF_LIMIT` | downloader + bot | Discord per-file limit, bytes (default 10MB). Above this the downloader builds a compressed copy in `discord_pdfs/` and the bot posts that; the full PDF is never altered. Shared by both so "fits" and "compressed" agree. |

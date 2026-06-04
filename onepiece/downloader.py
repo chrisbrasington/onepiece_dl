@@ -8,7 +8,13 @@ from .storage import Storage
 
 # Patterns that mark an acceptable image, matched against the WHOLE URL (host or
 # path) — e.g. "wp-content"/"cdn" are path markers, not hosts. Junk patterns are
-# rejected first. Shared by all download paths.
+# rejected first. Shared by all download paths. Add new source hosts without a
+# code change via ALLOWED_IMAGE_HOSTS (comma/space-separated) in .env.
+def _env_extra_hosts():
+    raw = os.environ.get("ALLOWED_IMAGE_HOSTS", "")
+    return [re.escape(h) for h in re.split(r"[,\s]+", raw.strip()) if h]
+
+
 ALLOWED_DOMAINS = [
     r"blogger\.googleusercontent\.com",
     r"cdn\.onepiecechapters\.com",
@@ -17,7 +23,8 @@ ALLOWED_DOMAINS = [
     r"wp-content",
     r"nangca\.com",
     r"mangaread\.org",
-]
+    r"mangaclash\.com",
+] + _env_extra_hosts()
 
 BLOCKED_PATTERNS = [
     r"\.avif$",
