@@ -122,6 +122,21 @@ class CalibreWebClient:
         return None
 
     # -- upload + metadata --------------------------------------------------
+    def _fetch_csrf(self, path="/"):
+        """Get a CSRF token from a GET-able page. /upload is POST-only, so its
+        token must come from a normal page — the upload form is in the layout,
+        so the home page carries one."""
+        try:
+            return self._csrf(self.session.get(self._url(path), timeout=30).text)
+        except requests.RequestException:
+            return None
+
+    def _csrf_headers(self, csrf):
+        headers = {"Referer": self.base_url + "/"}
+        if csrf:
+            headers["X-CSRFToken"] = csrf
+        return headers
+
     def _extract_book_id(self, resp):
         # Newer Calibre-Web returns JSON {"location": "/book/<id>"}; older
         # versions redirect. Try both.
@@ -145,7 +160,7 @@ class CalibreWebClient:
             return None
 
         upload_url = self._url("/upload")
-        csrf = self._csrf(self.session.get(upload_url, timeout=30).text)
+        csrf = self._fetch_csrf("/")
 
         tmpdir = tempfile.mkdtemp()
         try:
@@ -156,13 +171,14 @@ class CalibreWebClient:
                 data = {"csrf_token": csrf} if csrf else {}
                 resp = self.session.post(
                     upload_url, files=files, data=data, timeout=300,
-                    headers={"Referer": upload_url},
+                    headers=self._csrf_headers(csrf),
                 )
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
         if not resp.ok:
-            print(f"[calibre] upload failed ({resp.status_code}) for {title}")
+            body = " ".join((resp.text or "")[:300].split())
+            print(f"[calibre] upload failed ({resp.status_code}) for {title}: {body}")
             return None
         book_id = self._extract_book_id(resp)
         print(f"[calibre] uploaded '{title}' (book_id={book_id})")
@@ -185,7 +201,7 @@ class CalibreWebClient:
             if csrf:
                 data["csrf_token"] = csrf
             resp = self.session.post(
-                edit_url, data=data, timeout=60, headers={"Referer": edit_url}
+                edit_url, data=data, timeout=60, headers=self._csrf_headers(csrf)
             )
             ok = resp.ok
             print(f"[calibre] metadata for book {book_id}: "
