@@ -3,12 +3,12 @@ import requests
 from PIL import Image
 from bs4 import BeautifulSoup
 import re
-from urllib.parse import urlparse
 
 from .storage import Storage
 
-# Image hosts we accept pages from, and junk patterns we reject. Shared by all
-# download paths.
+# Patterns that mark an acceptable image, matched against the WHOLE URL (host or
+# path) — e.g. "wp-content"/"cdn" are path markers, not hosts. Junk patterns are
+# rejected first. Shared by all download paths.
 ALLOWED_DOMAINS = [
     r"blogger\.googleusercontent\.com",
     r"cdn\.onepiecechapters\.com",
@@ -16,6 +16,7 @@ ALLOWED_DOMAINS = [
     r"cdn",
     r"wp-content",
     r"nangca\.com",
+    r"mangaread\.org",
 ]
 
 BLOCKED_PATTERNS = [
@@ -63,14 +64,14 @@ class MangaDownloader:
     # Helper: Domain filtering
     # -------------------------------
     def is_allowed(self, url, allowed_domains=ALLOWED_DOMAINS, blocked_patterns=BLOCKED_PATTERNS):
-        host = urlparse(url).netloc.lower()
-
-        # Explicitly block unwanted patterns
+        # Block junk first.
         if any(re.search(pattern, url) for pattern in blocked_patterns):
             return False
 
-        # Allow only if host matches known patterns
-        return any(re.search(pattern, host) for pattern in allowed_domains)
+        # Allow if any pattern matches the whole URL (host OR path). Matching the
+        # full URL is the fix for the bug where path markers like "wp-content"
+        # never matched because only the host was checked.
+        return any(re.search(pattern, url, re.IGNORECASE) for pattern in allowed_domains)
 
     def _download_pages(self, images, name_prefix):
         """Download a list of image URLs into the work dir as
