@@ -123,7 +123,8 @@ class MangaDownloader:
 
         # Build a Discord-sized copy now, while the source pages still exist, so
         # the bot can post chapters whose full PDF exceeds Discord's upload limit.
-        discord_pdf = self.ensure_discord_pdf(chapter, images_on_disk, output_pdf)
+        # The full PDF is never altered — calibre and the webapp always use it.
+        discord_copy = self.ensure_discord_copy(output_pdf, images_on_disk)
 
         self.storage.write_meta(
             chapter,
@@ -131,7 +132,7 @@ class MangaDownloader:
             source_url=url,
             pages=len(images_on_disk),
             pdf=os.path.basename(output_pdf),
-            discord_pdf=(os.path.basename(discord_pdf) if discord_pdf != output_pdf else None),
+            discord_pdf=(os.path.basename(discord_copy) if discord_copy else None),
         )
 
         print(f"Chapter {chapter} downloaded as PDF: {output_pdf}")
@@ -141,18 +142,19 @@ class MangaDownloader:
 
         return output_pdf, images_on_disk
 
-    def ensure_discord_pdf(self, chapter, image_paths, full_pdf, limit=None):
-        """If the full PDF exceeds Discord's upload limit, write a compressed copy
-        into the discord_pdfs dir (rebuilt from the source pages). Returns the path
-        consumers should post: the compressed copy if one was made, else the full
-        PDF. Must be called while the page images still exist on disk."""
+    def ensure_discord_copy(self, full_pdf, image_paths, limit=None):
+        """If full_pdf exceeds Discord's upload limit, build a compressed sibling
+        in the discord_pdfs dir (same filename, rebuilt from the source pages) and
+        return its path. Otherwise return None — the full PDF fits and should be
+        posted as-is. The full PDF is left untouched. Call while page images exist."""
         if limit is None:
-            limit = int(float(os.environ.get("DISCORD_PDF_LIMIT", 9.5 * 1024 * 1024)))
+            limit = int(float(os.environ.get("DISCORD_PDF_LIMIT", 10 * 1024 * 1024)))
         if os.path.getsize(full_pdf) <= limit:
-            return full_pdf
-        dpath = self.storage.discord_pdf_path(chapter)
+            return None
+        dpath = self.storage.discord_copy_for(full_pdf)
+        target = int(limit * 0.95)  # leave headroom under the hard limit
         print(f"[discord] full PDF over {limit} bytes; building compressed copy")
-        self.compress_pdf_to_size(image_paths, dpath, limit)
+        self.compress_pdf_to_size(image_paths, dpath, target)
         return dpath
 
     def download_from_url(self, url, output_name="manual", delete_images=True):
@@ -170,6 +172,7 @@ class MangaDownloader:
 
         output_pdf = os.path.join(self.storage.pdf_dir, f"{output_name}.pdf")
         self.images_to_pdf(images_on_disk, output_pdf)
+        self.ensure_discord_copy(output_pdf, images_on_disk)
         print(f"Download complete: {output_pdf}")
 
         if delete_images:

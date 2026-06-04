@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Command-line control for the pipeline.
+
+Runs inside the downloader container (it has the download deps) and is wrapped by
+the host ./opctl script:
+
+  ./opctl request 1180             download chapter 1180 now; bot + calibre react
+  ./opctl request 1180 --no-post   download it but mark it so the bot skips it
+  ./opctl request 1180 --force     re-download even if already on disk
+
+A requested download goes straight into the shared storage, so the webapp shows
+it immediately and the calibre uploader (and bot, unless --no-post) pick it up on
+their next pass.
+"""
+
+import argparse
+import sys
+
+from .storage import Storage, Reconciler
+from .downloader import MangaDownloader
+
+
+def cmd_request(args):
+    storage = Storage()
+
+    # For --no-post, mark BEFORE downloading so the bot can't catch the file in
+    # the gap between it appearing and being marked (the bot reloads state each poll).
+    if args.no_post:
+        Reconciler(storage, "bot").mark(args.chapter)
+        print(f"marked chapter {args.chapter} so the bot will skip it")
+
+    if storage.has_chapter(args.chapter) and not args.force:
+        print(f"chapter {args.chapter} already present (use --force to re-download)")
+        return 0
+
+    downloader = MangaDownloader(storage)
+    pdf, _ = downloader.download_chapter(args.chapter)
+    if not pdf:
+        print(f"chapter {args.chapter} could not be downloaded (not released yet?)")
+        return 1
+
+    # Monotonic — only advances the pointer, so backfilling an older chapter
+    # leaves "latest" alone while requesting a newer one moves it forward.
+    downloader.save_last_chapter(args.chapter)
+    reactors = "calibre" if args.no_post else "calibre and the bot"
+    print(f"downloaded chapter {args.chapter}; {reactors} will pick it up shortly")
+    return 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="opctl")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    req = sub.add_parser("request", help="download a chapter now")
+    req.add_argument("chapter", type=int)
+    req.add_argument("--no-post", action="store_true",
+                     help="download but mark it so the bot doesn't post it")
+    req.add_argument("--force", action="store_true",
+                     help="re-download even if already on disk")
+    req.set_defaults(func=cmd_request)
+
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

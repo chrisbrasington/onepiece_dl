@@ -61,7 +61,7 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
 | `MAX_CATCHUP` | downloader | max chapters to grab per pass (default 3) |
 | `CHECK_INTERVAL_IDLE` / `CHECK_INTERVAL_WINDOW` / `CHECK_INTERVAL_LONGBREAK` | downloader | poll cadences, seconds (default 86400 / 3600 / 21600) |
 | `WINDOW_START_DAYS` / `LONG_BREAK_DAYS` | downloader | schedule thresholds (default 6 / 14) |
-| `DISCORD_PDF_LIMIT` | downloader | bytes; build a shrunk PDF copy above this (default ~9.5MB) |
+| `DISCORD_PDF_LIMIT` | downloader + bot | Discord per-file limit, bytes (default 10MB). Above this the downloader builds a compressed copy in `discord_pdfs/` and the bot posts that; the full PDF is never altered. Shared by both so "fits" and "compressed" agree. |
 | `CALIBRE_URL` | calibre | host-published Calibre-Web; from a container use `http://host.docker.internal:8083` (or the host LAN IP), not the host's hostname |
 | `CALIBRE_USERNAME` / `CALIBRE_PASSWORD` | calibre | Calibre-Web login |
 | `CALIBRE_POLL_INTERVAL` | calibre | seconds between watch passes (default 300) |
@@ -115,6 +115,28 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
 ```bash
 ONEPIECE_STORAGE=./storage RUN_ONCE=1 python services/downloader/main.py
 ```
+
+## Requesting a chapter manually (`opctl`)
+
+Run from the repo dir on valhalla (talks to the running downloader container):
+
+```bash
+./opctl request 1180             # download 1180 now; calibre + bot react
+./opctl request 1180 --no-post   # download it, but the bot won't post it (calibre still uploads)
+./opctl request 1180 --force     # re-download even if already on disk
+```
+
+The download lands in the shared volume immediately, so the webapp shows it right
+away and calibre (and the bot, unless `--no-post`) pick it up on their next pass.
+The webapp's "Request" box does the same thing via the request queue.
+
+## PDF handling
+
+The full-quality PDF (`pdfs/one piece - N.pdf`) is the canonical file — calibre and
+the webapp only ever use it, and it's never modified. If it exceeds the Discord
+limit, the downloader builds a compressed copy in `discord_pdfs/`; the bot posts
+the full one when it fits and the compressed one otherwise, then deletes the
+compressed copy after a successful post.
 
 ## Other tools
 - `download.py [chapter]` — one-off CLI download into the storage layout.

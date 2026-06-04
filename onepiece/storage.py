@@ -22,7 +22,7 @@ import os
 import re
 from datetime import datetime, timezone
 
-DEFAULT_ROOT = os.environ.get("ONEPIECE_STORAGE", "storage")
+DEFAULT_ROOT = "storage"
 
 # Chapter PDFs are named "one piece - <chapter>.pdf".
 _PDF_RE = re.compile(r"one piece - (\d+)\.pdf$", re.IGNORECASE)
@@ -31,7 +31,9 @@ _REQUEST_RE = re.compile(r"(\d+)\.request$")
 
 class Storage:
     def __init__(self, root=None):
-        self.root = root or DEFAULT_ROOT
+        # Resolve the env at construction (not import) so it's honored regardless
+        # of import order.
+        self.root = root or os.environ.get("ONEPIECE_STORAGE") or DEFAULT_ROOT
         self.pdf_dir = os.path.join(self.root, "pdfs")
         self.discord_dir = os.path.join(self.root, "discord_pdfs")
         self.preview_dir = os.path.join(self.root, "previews")
@@ -51,7 +53,12 @@ class Storage:
         """Optional size-reduced copy for Discord's upload limit. Only created by
         the downloader when the full PDF is too large; otherwise consumers fall
         back to pdf_path()."""
-        return os.path.join(self.discord_dir, f"one piece - {chapter}.pdf")
+        return self.discord_copy_for(self.pdf_path(chapter))
+
+    def discord_copy_for(self, full_pdf_path):
+        """Where the Discord-compressed copy of a given full PDF lives — same
+        filename, in the discord_pdfs dir. Used for both chapter and manual PDFs."""
+        return os.path.join(self.discord_dir, os.path.basename(full_pdf_path))
 
     def preview_path(self, chapter):
         return os.path.join(self.preview_dir, f"{chapter}.png")
@@ -62,12 +69,6 @@ class Storage:
     # ----- chapter inventory ----------------------------------------------
     def has_chapter(self, chapter):
         return os.path.exists(self.pdf_path(chapter))
-
-    def best_pdf(self, chapter):
-        """The Discord-sized copy if the downloader made one, else the full PDF.
-        The returned path may not exist if the chapter was never downloaded."""
-        dp = self.discord_pdf_path(chapter)
-        return dp if os.path.exists(dp) else self.pdf_path(chapter)
 
     def list_chapters(self):
         """Chapters with a PDF present, ascending."""
@@ -156,6 +157,13 @@ class Reconciler:
     def _save(self):
         with open(self.state_path, "w") as f:
             json.dump(sorted(self.processed), f)
+
+    def reload(self):
+        """Re-read the processed set from disk. Lets a long-running consumer (the
+        bot) pick up marks written by another process (the opctl helper) between
+        polls, instead of only at startup."""
+        self.processed = self._load()
+        return self.processed
 
     def pending(self):
         """Chapters present in storage that this consumer hasn't handled yet."""

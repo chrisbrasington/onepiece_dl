@@ -16,7 +16,9 @@ try:
 except ImportError:
     pass
 
-DISCORD_UPLOAD_LIMIT = 10 * 1024 * 1024  # Discord free-tier per-file limit
+# Discord free-tier per-file limit. Shares DISCORD_PDF_LIMIT with the downloader
+# so "does it fit" and "should we have compressed" agree.
+DISCORD_UPLOAD_LIMIT = int(float(os.environ.get("DISCORD_PDF_LIMIT", 10 * 1024 * 1024)))
 
 
 # ---------------------------------------------------------------------------
@@ -206,12 +208,19 @@ async def post_chapter(channel, chapter):
         except Exception as e:
             print(f"[autopost] preview load failed for {chapter}: {e}")
 
-    # PDF — prefer the Discord-sized copy the downloader made, else the full one.
-    pdf = bot.storage.best_pdf(chapter)
-    posted_pdf = False
-    if os.path.exists(pdf) and os.path.getsize(pdf) <= DISCORD_UPLOAD_LIMIT:
-        files.append(discord.File(pdf, filename=os.path.basename(bot.storage.pdf_path(chapter))))
-        posted_pdf = True
+    # PDF: use the full one if it fits Discord; otherwise the compressed copy the
+    # downloader made. The full PDF is never altered.
+    full = bot.storage.pdf_path(chapter)
+    discord_copy = bot.storage.discord_pdf_path(chapter)
+    pdf = None
+    if os.path.exists(full) and os.path.getsize(full) <= DISCORD_UPLOAD_LIMIT:
+        pdf = full
+    elif os.path.exists(discord_copy) and os.path.getsize(discord_copy) <= DISCORD_UPLOAD_LIMIT:
+        pdf = discord_copy
+
+    posted_pdf = pdf is not None
+    if posted_pdf:
+        files.append(discord.File(pdf, filename=os.path.basename(full)))
 
     header = f'# [{title}]({url})' if url else f'# {title}'
     if not posted_pdf:
@@ -220,11 +229,23 @@ async def post_chapter(channel, chapter):
     await channel.send(header, files=files, suppress_embeds=True)
     print(f"[autopost] posted chapter {chapter} (pdf={'yes' if posted_pdf else 'no'})")
 
+    # Cleanup: the compressed copy is only needed for the post — drop it now that
+    # the chapter is up. The full PDF stays for calibre/webapp.
+    if os.path.exists(discord_copy):
+        try:
+            os.remove(discord_copy)
+            print(f"[autopost] removed Discord copy for chapter {chapter}")
+        except OSError as e:
+            print(f"[autopost] could not remove Discord copy for {chapter}: {e}")
+
 
 @tasks.loop(seconds=float(os.environ.get("BOT_POLL_INTERVAL", "60")))
 async def autopost_loop():
     if bot.reconciler is None or bot.channel_id is None:
         return
+    # Re-read processed state so marks written by the opctl helper (e.g.
+    # `request --no-post`) are honored without restarting the bot.
+    bot.reconciler.reload()
     pending = bot.reconciler.pending()
     if not pending:
         return
@@ -279,25 +300,27 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
         # ------------------------
         files = []
 
-        # PDF — compress if it exceeds Discord's free upload limit (10MB).
-        safe_target = int(DISCORD_UPLOAD_LIMIT * 0.95)  # leave headroom
-
-        pdf_size = os.path.getsize(path)
-        if pdf_size > DISCORD_UPLOAD_LIMIT:
-            print(f"PDF is {pdf_size / (1024 * 1024):.2f}MB — compressing under "
-                  f"{safe_target / (1024 * 1024):.2f}MB...")
+        # PDF — never alter the full file (calibre/webapp use it). If it's over
+        # the Discord limit, post the compressed copy: the downloader already made
+        # one for chapter downloads; build one here for manual URL grabs.
+        full = path
+        discord_copy = bot.storage.discord_copy_for(full)
+        if os.path.getsize(full) > DISCORD_UPLOAD_LIMIT and not os.path.exists(discord_copy):
             await interaction.edit_original_response(content='Compressing PDF for upload...')
-            fit = await asyncio.to_thread(
-                bot.downloader.compress_pdf_to_size, images, path, safe_target
+            await asyncio.to_thread(
+                bot.downloader.compress_pdf_to_size, images, discord_copy,
+                int(DISCORD_UPLOAD_LIMIT * 0.95),
             )
-            new_size = os.path.getsize(path)
-            print(f"Compressed PDF: {new_size / (1024 * 1024):.2f}MB "
-                  f"({'fits' if fit else 'still too large'})")
 
-        # PDF
+        upload = None
+        if os.path.getsize(full) <= DISCORD_UPLOAD_LIMIT:
+            upload = full
+        elif os.path.exists(discord_copy) and os.path.getsize(discord_copy) <= DISCORD_UPLOAD_LIMIT:
+            upload = discord_copy
+
         try:
-            if os.path.getsize(path) <= DISCORD_UPLOAD_LIMIT:
-                files.append(discord.File(path, filename=os.path.basename(path)))
+            if upload:
+                files.append(discord.File(upload, filename=os.path.basename(full)))
             else:
                 print(f"Skipping PDF attachment — still over "
                       f"{DISCORD_UPLOAD_LIMIT / (1024 * 1024):.0f}MB after compression.")
@@ -332,6 +355,12 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
         # Cleanup + state
         # ------------------------
         bot.downloader.delete_images()
+        # Drop the compressed copy now that it's posted; full PDF stays.
+        if os.path.exists(discord_copy):
+            try:
+                os.remove(discord_copy)
+            except OSError:
+                pass
         bot.downloader.save_last_chapter(chapter)
         # Mark so the auto-poster doesn't re-post a chapter we just shared.
         if chapter and bot.reconciler is not None:

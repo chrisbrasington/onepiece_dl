@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Control the running pipeline from the host (talks to the containers).
+#
+#   ./opctl request 1180             download chapter 1180 now
+#   ./opctl request 1180 --no-post   download it, but the bot won't post it
+#   ./opctl request 1180 --force     re-download even if already present
+#
+# Runs the control CLI inside the downloader container, which shares the storage
+# volume; calibre and the bot react on their next pass.
+exec docker compose exec -T downloader python -m onepiece.control "$@"
