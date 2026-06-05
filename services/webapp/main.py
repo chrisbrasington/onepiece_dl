@@ -11,6 +11,7 @@ Env:
   WEBAPP_PORT        listen port (default 8080)
 """
 
+import json
 import os
 
 from fastapi import FastAPI, HTTPException
@@ -125,25 +126,166 @@ def read(chapter: int):
         raise HTTPException(status_code=404, detail="no pdf")
     meta = storage.read_meta(chapter) or {}
     title = meta.get("title") or f"One Piece Chapter {chapter}"
+    chapter_js = json.dumps(chapter)
+    title_js = json.dumps(title)
+    pdf_url = f"/pdf/{chapter}"
+    pdf_url_js = json.dumps(pdf_url)
+    dl_url = f"{pdf_url}?dl=1"
     return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title}</title>
-<style>
-  html,body{{margin:0;height:100%;background:#0e0f13;color:#e8e6e1;
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}}
-  .bar{{display:flex;gap:1rem;align-items:center;padding:.6rem 1rem;
-    background:#15171d;border-bottom:1px solid #23262f}}
-  .bar a{{color:#ffd23f;text-decoration:none;font-weight:600}}
-  .bar .t{{color:#e8e6e1;font-weight:600}}
-  iframe{{border:0;width:100%;height:calc(100% - 49px)}}
-</style></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title}</title>
+  <style>
+    * {{ margin:0; padding:0; box-sizing:border-box; }}
+    body {{ background:#0e0f13; height:100vh; display:flex; flex-direction:column; overflow:hidden;
+           font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:#e8e6e1; }}
+    .bar {{ background:#15171d; border-bottom:1px solid #23262f; padding:8px 14px;
+            display:flex; align-items:center; gap:10px; flex-shrink:0; min-width:0; }}
+    .bar a {{ color:#ffd23f; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap; }}
+    .bar a:hover {{ color:#fff; }}
+    .bar a.disabled {{ color:#444; pointer-events:none; }}
+    .bar .ch-title {{ color:#e8e6e1; font-size:13px; font-weight:600;
+                      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                      flex:1; text-align:center; min-width:0; }}
+    #viewer {{ flex:1; overflow:hidden; display:flex; align-items:center; justify-content:center;
+               position:relative; background:#0e0f13; }}
+    #page-canvas {{ max-height:100%; max-width:100%; display:block; }}
+    .hit-zone {{ position:absolute; top:0; bottom:0; width:35%; cursor:pointer; z-index:10; }}
+    #hz-prev {{ left:0; }}
+    #hz-next {{ right:0; }}
+    .page-info {{ position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+                  background:rgba(0,0,0,.55); color:#999; font-size:11px;
+                  padding:3px 9px; border-radius:8px; pointer-events:none; }}
+    #end-screen {{ position:absolute; inset:0; background:rgba(0,0,0,.82);
+                   display:none; align-items:center; justify-content:center;
+                   flex-direction:column; gap:18px; z-index:20; }}
+    #end-screen.show {{ display:flex; }}
+    #end-screen .msg {{ color:#ccc; font-size:15px; }}
+    #next-ch-btn {{ background:#ffd23f; color:#111; border:none; padding:12px 32px;
+                    border-radius:6px; font-size:16px; font-weight:700; cursor:pointer;
+                    text-decoration:none; display:none; }}
+    #next-ch-btn:hover {{ background:#ffe070; }}
+    #back-btn-end {{ color:#888; font-size:13px; text-decoration:none; }}
+    #back-btn-end:hover {{ color:#ccc; }}
+    #loading {{ position:absolute; inset:0; display:flex; align-items:center;
+                justify-content:center; color:#555; font-size:14px; }}
+  </style>
+</head>
 <body>
-  <div class="bar"><a href="/">&larr; Library</a>
-    <span class="t">{title}</span>
-    <a href="/pdf/{chapter}?dl=1" style="margin-left:auto">Download</a></div>
-  <iframe src="/pdf/{chapter}#zoom=page-width" title="{title}"></iframe>
-</body></html>"""
+  <div class="bar">
+    <a href="/">&larr; Library</a>
+    <a id="prev-ch" class="disabled" href="#">&lsaquo; Prev</a>
+    <span class="ch-title" id="ch-title"></span>
+    <a id="next-ch" class="disabled" href="#">Next &rsaquo;</a>
+    <a href="{dl_url}">&#8595;</a>
+  </div>
+  <div id="viewer">
+    <div id="loading">Loading&hellip;</div>
+    <canvas id="page-canvas" style="display:none"></canvas>
+    <div class="hit-zone" id="hz-prev"></div>
+    <div class="hit-zone" id="hz-next"></div>
+    <div class="page-info" id="page-info"></div>
+    <div id="end-screen">
+      <div class="msg" id="end-msg">End of chapter</div>
+      <a id="next-ch-btn" href="#">Continue to next chapter &rarr;</a>
+      <a id="back-btn-end" href="/">&larr; Back to library</a>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    const CHAPTER = {chapter_js};
+    const TITLE = {title_js};
+    const PDF_URL = {pdf_url_js};
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let pdfDoc = null, currentPage = 1, totalPages = 0, rendering = false;
+
+    function updateNav(chapters) {{
+      const sorted = chapters.slice().sort((a, b) => a.chapter - b.chapter);
+      const idx = sorted.findIndex(c => c.chapter === CHAPTER);
+      const prevEl = document.getElementById('prev-ch');
+      const nextEl = document.getElementById('next-ch');
+      const nextBtn = document.getElementById('next-ch-btn');
+      if (idx > 0) {{
+        prevEl.href = `/read/${{sorted[idx - 1].chapter}}`;
+        prevEl.classList.remove('disabled');
+      }}
+      if (idx >= 0 && idx < sorted.length - 1) {{
+        const u = `/read/${{sorted[idx + 1].chapter}}`;
+        nextEl.href = u;
+        nextEl.classList.remove('disabled');
+        nextBtn.href = u;
+        nextBtn.style.display = 'inline-block';
+      }}
+    }}
+
+    async function init() {{
+      document.getElementById('ch-title').textContent = TITLE;
+      try {{
+        const data = await fetch('/api/chapters').then(r => r.json());
+        updateNav(data);
+      }} catch(e) {{}}
+
+      try {{
+        pdfDoc = await pdfjsLib.getDocument(PDF_URL).promise;
+        totalPages = pdfDoc.numPages;
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('page-canvas').style.display = 'block';
+        const startPage = Math.min(Math.max(parseInt(new URLSearchParams(window.location.search).get('page')) || 1, 1), totalPages);
+        await renderPage(startPage);
+      }} catch(e) {{
+        document.getElementById('loading').textContent = 'Failed to load PDF.';
+      }}
+    }}
+
+    async function renderPage(n) {{
+      if (rendering || !pdfDoc) return;
+      rendering = true;
+      try {{
+        const page = await pdfDoc.getPage(n);
+        const vp0 = page.getViewport({{scale: 1}});
+        const viewer = document.getElementById('viewer');
+        const scale = viewer.clientHeight / vp0.height;
+        const vp = page.getViewport({{scale}});
+        const canvas = document.getElementById('page-canvas');
+        canvas.height = vp.height;
+        canvas.width = vp.width;
+        await page.render({{canvasContext: canvas.getContext('2d'), viewport: vp}}).promise;
+        currentPage = n;
+        document.getElementById('page-info').textContent = `${{n}} / ${{totalPages}}`;
+        document.getElementById('end-screen').classList.remove('show');
+      }} finally {{
+        rendering = false;
+      }}
+    }}
+
+    function goNext() {{
+      if (currentPage < totalPages) {{ renderPage(currentPage + 1); }}
+      else {{ document.getElementById('end-screen').classList.add('show'); }}
+    }}
+    function goPrev() {{
+      if (document.getElementById('end-screen').classList.contains('show')) {{
+        document.getElementById('end-screen').classList.remove('show');
+      }} else if (currentPage > 1) {{
+        renderPage(currentPage - 1);
+      }}
+    }}
+
+    document.getElementById('hz-next').addEventListener('click', goNext);
+    document.getElementById('hz-prev').addEventListener('click', goPrev);
+    document.addEventListener('keydown', e => {{
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goNext();
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPrev();
+    }});
+
+    init();
+  </script>
+</body>
+</html>"""
 
 
 @app.get("/", response_class=HTMLResponse)
