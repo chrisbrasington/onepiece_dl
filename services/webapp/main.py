@@ -226,7 +226,7 @@ def read(chapter: int):
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    let pdfDoc = null, currentPage = 1, totalPages = 0, rendering = false, overTimer = null;
+    let pdfDoc = null, currentPage = 1, totalPages = 0, renderSeq = 0, overTimer = null;
     let preCache = null, preCacheSeq = 0;
     let pageRotation = parseInt(sessionStorage.getItem('page_rotation') || '0');
     let zoomLevel = 1, panX = 0, panY = 0;
@@ -288,7 +288,7 @@ def read(chapter: int):
     async function loadChapter(ch) {{
       currentChapter = ch;
       if (pdfDoc) {{ pdfDoc.destroy(); pdfDoc = null; }}
-      currentPage = 1; totalPages = 0; preCache = null; preCacheSeq = 0; rendering = false;
+      currentPage = 1; totalPages = 0; preCache = null; preCacheSeq = 0;
       clearTimeout(overTimer);
       resetZoom();
       document.getElementById('end-screen').classList.remove('show');
@@ -308,9 +308,9 @@ def read(chapter: int):
         updateNav(data, ch);
         pdfDoc = await pdfjsLib.getDocument(`/pdf/${{ch}}`).promise;
         totalPages = pdfDoc.numPages;
-        loadingEl.style.display = 'none';
         document.getElementById('page-canvas').style.display = 'block';
         await renderPage(1);
+        loadingEl.style.display = 'none';
       }} catch(e) {{
         loadingEl.textContent = 'Failed to load chapter.';
       }}
@@ -325,47 +325,48 @@ def read(chapter: int):
       try {{
         pdfDoc = await pdfjsLib.getDocument(PDF_URL).promise;
         totalPages = pdfDoc.numPages;
-        document.getElementById('loading').style.display = 'none';
         document.getElementById('page-canvas').style.display = 'block';
         const startPage = Math.min(Math.max(parseInt(new URLSearchParams(window.location.search).get('page')) || 1, 1), totalPages);
         await renderPage(startPage);
+        document.getElementById('loading').style.display = 'none';
       }} catch(e) {{
         document.getElementById('loading').textContent = 'Failed to load PDF.';
       }}
     }}
 
     async function renderPage(n, fade) {{
-      if (rendering || !pdfDoc) return;
-      rendering = true;
-      ++preCacheSeq;
+      const seq = ++renderSeq;
       clearTimeout(overTimer);
       const over = document.getElementById('page-canvas-over');
       over.style.display = 'none';
-      try {{
-        const canvas = document.getElementById('page-canvas');
-        // Fast path: use pre-rendered cache (eliminates the blank-canvas flash)
-        if (!fade && preCache && preCache.page === n && preCache.rotation === pageRotation) {{
-          if (n !== currentPage) resetZoom();
-          const cached = preCache;
-          preCache = null;
-          canvas.width = cached.canvas.width;
-          canvas.height = cached.canvas.height;
-          canvas.style.width = Math.round(cached.canvas.width / cached.dpr) + 'px';
-          canvas.style.height = Math.round(cached.canvas.height / cached.dpr) + 'px';
-          canvas.getContext('2d').drawImage(cached.canvas, 0, 0);
-          cached.canvas.width = 0; cached.canvas.height = 0;
-          currentPage = n;
-          document.getElementById('page-info').textContent = `${{n}} / ${{totalPages}}`;
-          document.getElementById('end-screen').classList.remove('show');
-          preRenderNext(n + 1);
-          return;
-        }}
+      if (!pdfDoc) return;
+      const canvas = document.getElementById('page-canvas');
+
+      // Fast path: use pre-rendered cache (eliminates blank-canvas flash)
+      if (!fade && preCache && preCache.page === n && preCache.rotation === pageRotation) {{
         if (n !== currentPage) resetZoom();
+        const cached = preCache;
+        preCache = null;
+        canvas.width = cached.canvas.width;
+        canvas.height = cached.canvas.height;
+        canvas.style.width = Math.round(cached.canvas.width / cached.dpr) + 'px';
+        canvas.style.height = Math.round(cached.canvas.height / cached.dpr) + 'px';
+        canvas.getContext('2d').drawImage(cached.canvas, 0, 0);
+        cached.canvas.width = 0; cached.canvas.height = 0;
+        currentPage = n;
+        document.getElementById('page-info').textContent = `${{n}} / ${{totalPages}}`;
+        document.getElementById('end-screen').classList.remove('show');
+        preRenderNext(n + 1);
+        return;
+      }}
+
+      if (n !== currentPage) resetZoom();
+      try {{
         const page = await pdfDoc.getPage(n);
+        if (seq !== renderSeq) return;
         const vp0 = page.getViewport({{scale: 1, rotation: pageRotation}});
         const viewer = document.getElementById('viewer');
-        // Cap DPR at 2 — multiplying zoom into DPR makes canvases enormous on tablets
-        // and causes OOM crashes in Firefox Mobile when pinch-zooming.
+        // Cap DPR at 2 — prevents OOM on Firefox Mobile during pinch-zoom.
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const fitScale = Math.min(viewer.clientHeight / vp0.height, viewer.clientWidth / vp0.width);
         const scale = fitScale * dpr;
@@ -373,48 +374,40 @@ def read(chapter: int):
         const cssW = Math.round(vp.width / dpr) + 'px';
         const cssH = Math.round(vp.height / dpr) + 'px';
         if (fade) {{
-          // Render directly into overlay canvas (no tmp copy = half the memory)
           const w = Math.round(vp.width);
           const h = Math.round(vp.height);
-          over.width = w;
-          over.height = h;
-          over.style.width = cssW;
-          over.style.height = cssH;
-          over.style.transition = 'none';
-          over.style.opacity = '0';
-          over.style.display = 'none';
+          over.width = w; over.height = h;
+          over.style.width = cssW; over.style.height = cssH;
+          over.style.transition = 'none'; over.style.opacity = '0'; over.style.display = 'none';
           await page.render({{canvasContext: over.getContext('2d'), viewport: vp}}).promise;
-          page.cleanup();
+          if (seq !== renderSeq) {{ over.width = 0; over.height = 0; return; }}
           over.style.display = 'block';
           void over.offsetWidth;
-          over.style.transition = 'opacity 0.25s';
-          over.style.opacity = '1';
+          over.style.transition = 'opacity 0.25s'; over.style.opacity = '1';
           overTimer = setTimeout(() => {{
-            canvas.width = w;
-            canvas.height = h;
-            canvas.style.width = cssW;
-            canvas.style.height = cssH;
+            canvas.width = w; canvas.height = h;
+            canvas.style.width = cssW; canvas.style.height = cssH;
             canvas.getContext('2d').drawImage(over, 0, 0);
-            over.style.transition = 'none';
-            over.style.opacity = '0';
-            over.style.display = 'none';
+            over.style.transition = 'none'; over.style.opacity = '0'; over.style.display = 'none';
             over.width = 0; over.height = 0;
           }}, 280);
         }} else {{
-          canvas.width = Math.round(vp.width);
-          canvas.height = Math.round(vp.height);
-          canvas.style.width = cssW;
-          canvas.style.height = cssH;
-          await page.render({{canvasContext: canvas.getContext('2d'), viewport: vp}}).promise;
-          page.cleanup();
+          // Render to tmp first — old page stays visible during decode, no black flash
+          const tmp = document.createElement('canvas');
+          tmp.width = Math.round(vp.width);
+          tmp.height = Math.round(vp.height);
+          await page.render({{canvasContext: tmp.getContext('2d'), viewport: vp}}).promise;
+          if (seq !== renderSeq) {{ tmp.width = 0; tmp.height = 0; return; }}
+          canvas.width = tmp.width; canvas.height = tmp.height;
+          canvas.style.width = cssW; canvas.style.height = cssH;
+          canvas.getContext('2d').drawImage(tmp, 0, 0);
+          tmp.width = 0; tmp.height = 0;
         }}
         currentPage = n;
         document.getElementById('page-info').textContent = `${{n}} / ${{totalPages}}`;
         document.getElementById('end-screen').classList.remove('show');
         preRenderNext(n + 1);
-      }} finally {{
-        rendering = false;
-      }}
+      }} catch(e) {{}}
     }}
 
     async function preRenderNext(n) {{
@@ -433,7 +426,6 @@ def read(chapter: int):
         tmp.width = Math.round(vp.width);
         tmp.height = Math.round(vp.height);
         await page.render({{canvasContext: tmp.getContext('2d'), viewport: vp}}).promise;
-        page.cleanup();
         if (seq !== preCacheSeq) {{ tmp.width = 0; tmp.height = 0; return; }}
         preCache = {{page: n, canvas: tmp, dpr, rotation: pageRotation}};
       }} catch(e) {{}}
