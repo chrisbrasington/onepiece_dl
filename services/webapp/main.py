@@ -173,8 +173,10 @@ def read(chapter: int):
                   padding:3px 9px; border-radius:8px; pointer-events:none; }}
     #end-screen {{ position:absolute; inset:0; background:rgba(0,0,0,.82);
                    display:none; align-items:center; justify-content:center;
-                   flex-direction:column; gap:18px; z-index:20; }}
+                   flex-direction:column; gap:18px; z-index:20;
+                   pointer-events:none; }}
     #end-screen.show {{ display:flex; }}
+    #end-screen > * {{ pointer-events:auto; }}
     #end-screen .msg {{ color:#ccc; font-size:15px; }}
     #next-ch-btn {{ background:#ffd23f; color:#111; border:none; padding:12px 32px;
                     border-radius:6px; font-size:16px; font-weight:700; cursor:pointer;

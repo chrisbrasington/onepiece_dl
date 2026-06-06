@@ -85,8 +85,11 @@ class CalibreWebClient:
     # -- auth ---------------------------------------------------------------
     def login(self):
         login_url = self._url("/login")
-        resp = self.session.get(login_url, timeout=30)
-        resp.raise_for_status()
+        try:
+            resp = self.session.get(login_url, timeout=30)
+            resp.raise_for_status()
+        except requests.RequestException:
+            return False
         csrf = self._csrf(resp.text)
 
         data = {
