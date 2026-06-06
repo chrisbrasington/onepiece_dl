@@ -227,7 +227,7 @@ def read(chapter: int):
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     let pdfDoc = null, currentPage = 1, totalPages = 0, rendering = false, overTimer = null;
-    let preCache = null, preCacheSeq = 0;
+    let preCache = null;
     let pageRotation = parseInt(sessionStorage.getItem('page_rotation') || '0');
     let zoomLevel = 1, panX = 0, panY = 0;
     const MAX_ZOOM = 3;
@@ -288,7 +288,7 @@ def read(chapter: int):
     async function loadChapter(ch) {{
       currentChapter = ch;
       if (pdfDoc) {{ pdfDoc.destroy(); pdfDoc = null; }}
-      currentPage = 1; totalPages = 0; preCache = null; preCacheSeq = 0; rendering = false;
+      currentPage = 1; totalPages = 0; preCache = null; rendering = false;
       clearTimeout(overTimer);
       resetZoom();
       document.getElementById('end-screen').classList.remove('show');
@@ -383,7 +383,6 @@ def read(chapter: int):
           over.style.opacity = '0';
           over.style.display = 'none';
           await page.render({{canvasContext: over.getContext('2d'), viewport: vp}}).promise;
-          page.cleanup();
           over.style.display = 'block';
           void over.offsetWidth;
           over.style.transition = 'opacity 0.25s';
@@ -397,7 +396,6 @@ def read(chapter: int):
             over.style.transition = 'none';
             over.style.opacity = '0';
             over.style.display = 'none';
-            over.width = 0; over.height = 0;
           }}, 280);
         }} else {{
           canvas.width = Math.round(vp.width);
@@ -405,7 +403,6 @@ def read(chapter: int):
           canvas.style.width = cssW;
           canvas.style.height = cssH;
           await page.render({{canvasContext: canvas.getContext('2d'), viewport: vp}}).promise;
-          page.cleanup();
         }}
         currentPage = n;
         document.getElementById('page-info').textContent = `${{n}} / ${{totalPages}}`;
@@ -420,7 +417,6 @@ def read(chapter: int):
       if (!pdfDoc || n < 1 || n > totalPages) return;
       if (preCache && preCache.page === n) return;
       preCache = null;
-      const seq = ++preCacheSeq;
       try {{
         const page = await pdfDoc.getPage(n);
         const vp0 = page.getViewport({{scale: 1, rotation: pageRotation}});
@@ -432,8 +428,6 @@ def read(chapter: int):
         tmp.width = Math.round(vp.width);
         tmp.height = Math.round(vp.height);
         await page.render({{canvasContext: tmp.getContext('2d'), viewport: vp}}).promise;
-        page.cleanup();
-        if (seq !== preCacheSeq) {{ tmp.width = 0; tmp.height = 0; return; }}
         preCache = {{page: n, canvas: tmp, dpr, rotation: pageRotation}};
       }} catch(e) {{}}
     }}
