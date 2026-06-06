@@ -16,6 +16,7 @@ import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
+from starlette.staticfiles import StaticFiles
 
 from onepiece.storage import Storage
 
@@ -29,6 +30,7 @@ storage = Storage()
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 app = FastAPI(title="One Piece Library")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 # --- framework-free helpers (unit-testable without FastAPI) ----------------
@@ -217,17 +219,16 @@ def read(chapter: int):
       <a id="back-btn-end" href="/">&larr; Back to library</a>
     </div>
   </div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="/static/pdf.min.js"></script>
   <script>
     const CHAPTER = {chapter_js};
     const TITLE = {title_js};
     const PDF_URL = {pdf_url_js};
 
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/pdf.worker.min.js';
 
     let pdfDoc = null, currentPage = 1, totalPages = 0, rendering = false, overTimer = null;
-    let preCache = null;
+    let preCache = null, preCacheInFlight = false;
     let pageRotation = parseInt(sessionStorage.getItem('page_rotation') || '0');
     let zoomLevel = 1, panX = 0, panY = 0;
     const MAX_ZOOM = 3;
@@ -288,7 +289,7 @@ def read(chapter: int):
     async function loadChapter(ch) {{
       currentChapter = ch;
       if (pdfDoc) {{ pdfDoc.destroy(); pdfDoc = null; }}
-      currentPage = 1; totalPages = 0; preCache = null; rendering = false;
+      currentPage = 1; totalPages = 0; preCache = null; preCacheInFlight = false; rendering = false;
       clearTimeout(overTimer);
       resetZoom();
       document.getElementById('end-screen').classList.remove('show');
@@ -299,14 +300,17 @@ def read(chapter: int):
       loadingEl.style.display = 'flex';
       history.pushState(null, '', `/read/${{ch}}`);
       try {{
-        const data = await fetch('/api/chapters').then(r => r.json());
+        const [data, doc] = await Promise.all([
+          fetch('/api/chapters').then(r => r.json()),
+          pdfjsLib.getDocument(`/pdf/${{ch}}`).promise
+        ]);
         const meta = data.find(c => c.chapter === ch);
         const title = (meta && meta.title) || `One Piece Chapter ${{ch}}`;
         document.getElementById('ch-title').textContent = title;
         document.title = title;
         document.getElementById('dl-btn').href = `/pdf/${{ch}}?dl=1`;
         updateNav(data, ch);
-        pdfDoc = await pdfjsLib.getDocument(`/pdf/${{ch}}`).promise;
+        pdfDoc = doc;
         totalPages = pdfDoc.numPages;
         loadingEl.style.display = 'none';
         document.getElementById('page-canvas').style.display = 'block';
@@ -318,12 +322,11 @@ def read(chapter: int):
 
     async function init() {{
       document.getElementById('ch-title').textContent = TITLE;
+      const navP = fetch('/api/chapters').then(r => r.json()).catch(() => null);
       try {{
-        const data = await fetch('/api/chapters').then(r => r.json());
-        updateNav(data, CHAPTER);
-      }} catch(e) {{}}
-      try {{
-        pdfDoc = await pdfjsLib.getDocument(PDF_URL).promise;
+        const [data, doc] = await Promise.all([navP, pdfjsLib.getDocument(PDF_URL).promise]);
+        if (data) updateNav(data, CHAPTER);
+        pdfDoc = doc;
         totalPages = pdfDoc.numPages;
         document.getElementById('loading').style.display = 'none';
         document.getElementById('page-canvas').style.display = 'block';
@@ -342,7 +345,7 @@ def read(chapter: int):
       over.style.display = 'none';
       try {{
         const canvas = document.getElementById('page-canvas');
-        // Fast path: use pre-rendered cache (eliminates the blank-canvas flash)
+        // Fast path: swap in the pre-rendered canvas — no decode, no black flash
         if (!fade && preCache && preCache.page === n && preCache.rotation === pageRotation) {{
           if (n !== currentPage) resetZoom();
           const cached = preCache;
@@ -351,7 +354,7 @@ def read(chapter: int):
           canvas.height = cached.canvas.height;
           canvas.style.width = Math.round(cached.canvas.width / cached.dpr) + 'px';
           canvas.style.height = Math.round(cached.canvas.height / cached.dpr) + 'px';
-          canvas.getContext('2d').drawImage(cached.canvas, 0, 0);
+          canvas.getContext('2d', {{alpha: false}}).drawImage(cached.canvas, 0, 0);
           cached.canvas.width = 0; cached.canvas.height = 0;
           currentPage = n;
           document.getElementById('page-info').textContent = `${{n}} / ${{totalPages}}`;
@@ -359,6 +362,8 @@ def read(chapter: int):
           preRenderNext(n + 1);
           return;
         }}
+        // Slow path — kick off the next-page pre-render NOW so it overlaps with this decode
+        preRenderNext(n + 1);
         if (n !== currentPage) resetZoom();
         const page = await pdfDoc.getPage(n);
         const vp0 = page.getViewport({{scale: 1, rotation: pageRotation}});
@@ -382,7 +387,7 @@ def read(chapter: int):
           over.style.transition = 'none';
           over.style.opacity = '0';
           over.style.display = 'none';
-          await page.render({{canvasContext: over.getContext('2d'), viewport: vp}}).promise;
+          await page.render({{canvasContext: over.getContext('2d', {{alpha: false}}), viewport: vp}}).promise;
           over.style.display = 'block';
           void over.offsetWidth;
           over.style.transition = 'opacity 0.25s';
@@ -392,22 +397,27 @@ def read(chapter: int):
             canvas.height = h;
             canvas.style.width = cssW;
             canvas.style.height = cssH;
-            canvas.getContext('2d').drawImage(over, 0, 0);
+            canvas.getContext('2d', {{alpha: false}}).drawImage(over, 0, 0);
             over.style.transition = 'none';
             over.style.opacity = '0';
             over.style.display = 'none';
           }}, 280);
         }} else {{
-          canvas.width = Math.round(vp.width);
-          canvas.height = Math.round(vp.height);
+          // Render to tmp first — visible canvas stays on current page until decode completes
+          const tmp = document.createElement('canvas');
+          tmp.width = Math.round(vp.width);
+          tmp.height = Math.round(vp.height);
+          await page.render({{canvasContext: tmp.getContext('2d', {{alpha: false}}), viewport: vp}}).promise;
+          canvas.width = tmp.width;
+          canvas.height = tmp.height;
           canvas.style.width = cssW;
           canvas.style.height = cssH;
-          await page.render({{canvasContext: canvas.getContext('2d'), viewport: vp}}).promise;
+          canvas.getContext('2d', {{alpha: false}}).drawImage(tmp, 0, 0);
+          tmp.width = 0; tmp.height = 0;
         }}
         currentPage = n;
         document.getElementById('page-info').textContent = `${{n}} / ${{totalPages}}`;
         document.getElementById('end-screen').classList.remove('show');
-        preRenderNext(n + 1);
       }} finally {{
         rendering = false;
       }}
@@ -415,7 +425,8 @@ def read(chapter: int):
 
     async function preRenderNext(n) {{
       if (!pdfDoc || n < 1 || n > totalPages) return;
-      if (preCache && preCache.page === n) return;
+      if ((preCache && preCache.page === n) || preCacheInFlight) return;
+      preCacheInFlight = true;
       preCache = null;
       try {{
         const page = await pdfDoc.getPage(n);
@@ -427,9 +438,11 @@ def read(chapter: int):
         const tmp = document.createElement('canvas');
         tmp.width = Math.round(vp.width);
         tmp.height = Math.round(vp.height);
-        await page.render({{canvasContext: tmp.getContext('2d'), viewport: vp}}).promise;
+        await page.render({{canvasContext: tmp.getContext('2d', {{alpha: false}}), viewport: vp}}).promise;
         preCache = {{page: n, canvas: tmp, dpr, rotation: pageRotation}};
-      }} catch(e) {{}}
+      }} catch(e) {{}} finally {{
+        preCacheInFlight = false;
+      }}
     }}
 
     function goNext() {{
