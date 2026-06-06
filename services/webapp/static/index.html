@@ -22,7 +22,7 @@
   .req input{width:7rem;background:#0e0f13;border:1px solid var(--line);
     color:var(--ink);border-radius:8px;padding:.45rem .6rem}
   .req button,.pill{cursor:pointer;border:0;border-radius:8px;
-    padding:.45rem .8rem;font-weight:600}
+    padding:.6rem 1rem;font-weight:600;font-size:.95rem}
   .req button{background:var(--straw);color:#1a1a1a}
   .req button:hover{filter:brightness(1.08)}
   #pending{display:flex;gap:.4rem;flex-wrap:wrap;padding:.6rem 1.2rem 0}
@@ -37,7 +37,8 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
     overflow:hidden;display:flex;flex-direction:column;transition:transform .12s,border-color .12s}
   .card:hover{transform:translateY(-3px);border-color:#39414f}
-  .thumb{aspect-ratio:2/3;background:#0a0b0e center/cover no-repeat;display:block}
+  .thumb{aspect-ratio:2/3;background:#0a0b0e;display:block;overflow:hidden}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
   .thumb.ph{display:flex;align-items:center;justify-content:center;color:#3a4150;font-size:2.2rem}
   .meta{padding:.7rem .8rem;display:flex;flex-direction:column;gap:.15rem;flex:1}
   .ch{color:var(--straw);font-weight:700;font-size:.8rem;letter-spacing:.4px}
@@ -83,7 +84,7 @@ function toast(msg){
 
 function card(c){
   const thumb = c.has_preview
-    ? `<a class="thumb" href="/read/${c.chapter}" style="background-image:url('/preview/${c.chapter}')"></a>`
+    ? `<a class="thumb" href="/read/${c.chapter}"><img src="/preview/${c.chapter}" alt="Ch ${c.chapter}" loading="lazy" decoding="async"></a>`
     : `<a class="thumb ph" href="/read/${c.chapter}">📖</a>`;
   const pages = c.pages ? `${c.pages} pages` : '';
   return `<div class="card">

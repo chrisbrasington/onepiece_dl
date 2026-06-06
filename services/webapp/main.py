@@ -141,14 +141,26 @@ def read(chapter: int):
     * {{ margin:0; padding:0; box-sizing:border-box; }}
     body {{ background:#0e0f13; height:100vh; display:flex; flex-direction:column; overflow:hidden;
            font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:#e8e6e1; }}
-    .bar {{ background:#15171d; border-bottom:1px solid #23262f; padding:8px 14px;
-            display:flex; align-items:center; gap:10px; flex-shrink:0; min-width:0; }}
-    .bar a {{ color:#ffd23f; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap; }}
-    .bar a:hover {{ color:#fff; }}
-    .bar a.disabled {{ color:#444; pointer-events:none; }}
+    .bar {{ background:#15171d; border-bottom:1px solid #23262f; padding:6px 10px;
+            display:flex; align-items:center; gap:2px; flex-shrink:0; min-width:0; }}
+    .bar a {{ color:#ffd23f; text-decoration:none; font-size:15px; font-weight:700;
+              white-space:nowrap; padding:10px 12px; border-radius:8px; min-height:44px;
+              display:inline-flex; align-items:center; }}
+    .bar a:hover {{ color:#fff; background:rgba(255,255,255,.1); }}
+    .bar a.disabled {{ color:#333; pointer-events:none; background:none; }}
     .bar .ch-title {{ color:#e8e6e1; font-size:13px; font-weight:600;
                       overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
                       flex:1; text-align:center; min-width:0; }}
+    #fs-btn {{ background:none; border:none; color:#ffd23f; cursor:pointer;
+               padding:10px 12px; border-radius:8px; min-height:44px; min-width:44px;
+               display:inline-flex; align-items:center; justify-content:center;
+               flex-shrink:0; }}
+    #fs-btn:hover {{ color:#fff; background:rgba(255,255,255,.1); }}
+    @media (max-width:600px) {{
+      .bar a {{ font-size:18px; padding:12px 14px; min-height:52px; }}
+      #fs-btn {{ padding:12px 14px; min-height:52px; min-width:52px; }}
+      .bar .ch-title {{ font-size:12px; }}
+    }}
     #viewer {{ flex:1; overflow:hidden; display:flex; align-items:center; justify-content:center;
                position:relative; background:#0e0f13; }}
     #page-canvas {{ display:block; }}
@@ -185,6 +197,7 @@ def read(chapter: int):
     <span class="ch-title" id="ch-title"></span>
     <a id="next-ch" class="disabled" href="#">Next &rsaquo;</a>
     <a href="{dl_url}">&#8595;</a>
+    <button id="fs-btn" title="Fullscreen"></button>
   </div>
   <div id="viewer">
     <div id="loading">Loading&hellip;</div>
@@ -210,6 +223,7 @@ def read(chapter: int):
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     let pdfDoc = null, currentPage = 1, totalPages = 0, rendering = false, overTimer = null;
+    let preCache = null;
 
     function updateNav(chapters) {{
       const sorted = chapters.slice().sort((a, b) => a.chapter - b.chapter);
@@ -220,13 +234,16 @@ def read(chapter: int):
       if (idx > 0) {{
         prevEl.href = `/read/${{sorted[idx - 1].chapter}}`;
         prevEl.classList.remove('disabled');
+        prevEl.addEventListener('click', markNavFs);
       }}
       if (idx >= 0 && idx < sorted.length - 1) {{
         const u = `/read/${{sorted[idx + 1].chapter}}`;
         nextEl.href = u;
         nextEl.classList.remove('disabled');
+        nextEl.addEventListener('click', markNavFs);
         nextBtn.href = u;
         nextBtn.style.display = 'inline-block';
+        nextBtn.addEventListener('click', markNavFs);
       }}
     }}
 
@@ -256,66 +273,93 @@ def read(chapter: int):
       const over = document.getElementById('page-canvas-over');
       over.style.display = 'none';
       try {{
+        const canvas = document.getElementById('page-canvas');
+        // Fast path: use pre-rendered cache (eliminates the blank-canvas flash)
+        if (!fade && preCache && preCache.page === n) {{
+          const cached = preCache;
+          preCache = null;
+          canvas.width = cached.canvas.width;
+          canvas.height = cached.canvas.height;
+          canvas.style.width = Math.round(cached.canvas.width / cached.dpr) + 'px';
+          canvas.style.height = Math.round(cached.canvas.height / cached.dpr) + 'px';
+          canvas.getContext('2d').drawImage(cached.canvas, 0, 0);
+          cached.canvas.width = 0; cached.canvas.height = 0;
+          currentPage = n;
+          document.getElementById('page-info').textContent = `${{n}} / ${{totalPages}}`;
+          document.getElementById('end-screen').classList.remove('show');
+          preRenderNext(n + 1);
+          return;
+        }}
         const page = await pdfDoc.getPage(n);
         const vp0 = page.getViewport({{scale: 1}});
         const viewer = document.getElementById('viewer');
-        const screenDpr = window.devicePixelRatio || 1;
-        const zoomScale = window.visualViewport ? window.visualViewport.scale : 1;
-        const dpr = screenDpr * zoomScale;
+        // Cap DPR at 2 — multiplying zoom into DPR makes canvases enormous on tablets
+        // and causes OOM crashes in Firefox Mobile when pinch-zooming.
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const fitScale = Math.min(viewer.clientHeight / vp0.height, viewer.clientWidth / vp0.width);
         const scale = fitScale * dpr;
         const vp = page.getViewport({{scale}});
-        const tmp = document.createElement('canvas');
-        tmp.width = Math.round(vp.width);
-        tmp.height = Math.round(vp.height);
-        /*document.getElementById('dbg').textContent =
-          `page ${{n}}  fade=${{!!fade}}\n` +
-          `screen dpr: ${{screenDpr.toFixed(2)}}\n` +
-          `zoom scale: ${{zoomScale.toFixed(3)}}\n` +
-          `render dpr: ${{dpr.toFixed(3)}}\n` +
-          `fit scale:  ${{fitScale.toFixed(4)}}\n` +
-          `canvas px:  ${{tmp.width}}×${{tmp.height}}\n` +
-          `css px:     ${{(tmp.width/dpr).toFixed(0)}}×${{(tmp.height/dpr).toFixed(0)}}`;*/
-        await page.render({{canvasContext: tmp.getContext('2d'), viewport: vp}}).promise;
-        const canvas = document.getElementById('page-canvas');
-        const cssW = (tmp.width / dpr) + 'px';
-        const cssH = (tmp.height / dpr) + 'px';
+        const cssW = Math.round(vp.width / dpr) + 'px';
+        const cssH = Math.round(vp.height / dpr) + 'px';
         if (fade) {{
-          // Render into overlay; fade it in over the still-visible main canvas
-          over.width = tmp.width;
-          over.height = tmp.height;
+          // Render directly into overlay canvas (no tmp copy = half the memory)
+          const w = Math.round(vp.width);
+          const h = Math.round(vp.height);
+          over.width = w;
+          over.height = h;
           over.style.width = cssW;
           over.style.height = cssH;
-          over.getContext('2d').drawImage(tmp, 0, 0);
           over.style.transition = 'none';
           over.style.opacity = '0';
+          over.style.display = 'none';
+          await page.render({{canvasContext: over.getContext('2d'), viewport: vp}}).promise;
           over.style.display = 'block';
           void over.offsetWidth;
           over.style.transition = 'opacity 0.25s';
           over.style.opacity = '1';
           overTimer = setTimeout(() => {{
-            canvas.width = tmp.width;
-            canvas.height = tmp.height;
+            canvas.width = w;
+            canvas.height = h;
             canvas.style.width = cssW;
             canvas.style.height = cssH;
-            canvas.getContext('2d').drawImage(tmp, 0, 0);
+            canvas.getContext('2d').drawImage(over, 0, 0);
             over.style.transition = 'none';
             over.style.opacity = '0';
             over.style.display = 'none';
           }}, 280);
         }} else {{
-          canvas.width = tmp.width;
-          canvas.height = tmp.height;
+          canvas.width = Math.round(vp.width);
+          canvas.height = Math.round(vp.height);
           canvas.style.width = cssW;
           canvas.style.height = cssH;
-          canvas.getContext('2d').drawImage(tmp, 0, 0);
+          await page.render({{canvasContext: canvas.getContext('2d'), viewport: vp}}).promise;
         }}
         currentPage = n;
         document.getElementById('page-info').textContent = `${{n}} / ${{totalPages}}`;
         document.getElementById('end-screen').classList.remove('show');
+        preRenderNext(n + 1);
       }} finally {{
         rendering = false;
       }}
+    }}
+
+    async function preRenderNext(n) {{
+      if (!pdfDoc || n < 1 || n > totalPages) return;
+      if (preCache && preCache.page === n) return;
+      preCache = null;
+      try {{
+        const page = await pdfDoc.getPage(n);
+        const vp0 = page.getViewport({{scale: 1}});
+        const viewer = document.getElementById('viewer');
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const fitScale = Math.min(viewer.clientHeight / vp0.height, viewer.clientWidth / vp0.width);
+        const vp = page.getViewport({{scale: fitScale * dpr}});
+        const tmp = document.createElement('canvas');
+        tmp.width = Math.round(vp.width);
+        tmp.height = Math.round(vp.height);
+        await page.render({{canvasContext: tmp.getContext('2d'), viewport: vp}}).promise;
+        preCache = {{page: n, canvas: tmp, dpr}};
+      }} catch(e) {{}}
     }}
 
     function goNext() {{
@@ -335,13 +379,53 @@ def read(chapter: int):
     document.addEventListener('keydown', e => {{
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goNext();
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPrev();
+      if (e.key === 'f' || e.key === 'F') document.getElementById('fs-btn').click();
     }});
+
+    // Fullscreen toggle
+    const fsBtn = document.getElementById('fs-btn');
+    const FS_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6V1h5M10 1h5v5M15 10v5h-5M6 15H1v-5"/></svg>';
+    const EX_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1v5H1M15 6h-5V1M10 15v-5h5M1 10h5v5"/></svg>';
+    function updateFsBtn() {{
+      const inFs = !!document.fullscreenElement;
+      fsBtn.innerHTML = inFs ? EX_ICON : FS_ICON;
+      fsBtn.title = inFs ? 'Exit fullscreen' : 'Fullscreen';
+    }}
+    updateFsBtn();
+    fsBtn.addEventListener('click', () => {{
+      if (document.fullscreenElement) {{ document.exitFullscreen(); }}
+      else {{ document.documentElement.requestFullscreen().catch(() => {{}}); }}
+    }});
+    document.addEventListener('fullscreenchange', updateFsBtn);
+
+    // Persist fullscreen across chapter navigations
+    function markNavFs() {{
+      if (document.fullscreenElement) sessionStorage.setItem('resume_fs', '1');
+    }}
+    if (sessionStorage.getItem('resume_fs')) {{
+      sessionStorage.removeItem('resume_fs');
+      // Re-enter fullscreen on first tap (requires a user gesture)
+      const enterFsOnce = (e) => {{
+        if (e.target.id === 'fs-btn') return;
+        document.documentElement.requestFullscreen().catch(() => {{}});
+        document.removeEventListener('click', enterFsOnce, true);
+      }};
+      document.addEventListener('click', enterFsOnce, true);
+    }}
 
     if (window.visualViewport) {{
       let _zt = null;
       window.visualViewport.addEventListener('resize', () => {{
+        preCache = null;
         clearTimeout(_zt);
-        _zt = setTimeout(() => {{ if (pdfDoc) renderPage(currentPage, true); }}, 350);
+        _zt = setTimeout(() => {{
+          // Skip re-render when user is pinch-zooming — that would create a
+          // massive canvas proportional to zoom level and crash low-memory devices.
+          // Only re-render on genuine viewport changes (rotation, browser chrome).
+          if (pdfDoc && window.visualViewport.scale <= 1.05) {{
+            renderPage(currentPage, true);
+          }}
+        }}, 350);
       }});
     }}
 
