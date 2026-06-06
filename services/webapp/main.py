@@ -455,13 +455,17 @@ def read(chapter: int):
     }}
     if (sessionStorage.getItem('resume_fs')) {{
       sessionStorage.removeItem('resume_fs');
-      // Re-enter fullscreen on first tap (requires a user gesture)
-      const enterFsOnce = (e) => {{
-        if (e.target.id === 'fs-btn') return;
-        document.documentElement.requestFullscreen().catch(() => {{}});
-        document.removeEventListener('click', enterFsOnce, true);
-      }};
-      document.addEventListener('click', enterFsOnce, true);
+      document.documentElement.requestFullscreen().catch(() => {{
+        // Fallback: re-enter on first user interaction (click or keydown)
+        const enterFsOnce = (e) => {{
+          if (e.target.id === 'fs-btn') return;
+          document.documentElement.requestFullscreen().catch(() => {{}});
+          document.removeEventListener('click', enterFsOnce, true);
+          document.removeEventListener('keydown', enterFsOnce, true);
+        }};
+        document.addEventListener('click', enterFsOnce, true);
+        document.addEventListener('keydown', enterFsOnce, true);
+      }});
     }}
 
     // Zoom + pan
