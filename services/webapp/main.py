@@ -200,7 +200,7 @@ def read(chapter: int):
     <a id="prev-ch" class="disabled" href="#">&lsaquo; Prev</a>
     <span class="ch-title" id="ch-title"></span>
     <a id="next-ch" class="disabled" href="#">Next &rsaquo;</a>
-    <a href="{dl_url}">&#8595;</a>
+    <a id="dl-btn" href="{dl_url}">&#8595;</a>
     <button id="fs-btn" title="Fullscreen"></button>
   </div>
   <div id="viewer">
@@ -231,6 +231,8 @@ def read(chapter: int):
     let pageRotation = parseInt(sessionStorage.getItem('page_rotation') || '0');
     let zoomLevel = 1, panX = 0, panY = 0;
     const MAX_ZOOM = 3;
+    let currentChapter = CHAPTER;
+    let nextChapter = null;
 
     function clampPan() {{
       const c = document.getElementById('page-canvas');
@@ -252,25 +254,65 @@ def read(chapter: int):
       document.getElementById('page-canvas').style.transform = '';
     }}
 
-    function updateNav(chapters) {{
+    function updateNav(chapters, ch) {{
       const sorted = chapters.slice().sort((a, b) => a.chapter - b.chapter);
-      const idx = sorted.findIndex(c => c.chapter === CHAPTER);
+      const idx = sorted.findIndex(c => c.chapter === ch);
       const prevEl = document.getElementById('prev-ch');
       const nextEl = document.getElementById('next-ch');
       const nextBtn = document.getElementById('next-ch-btn');
+      prevEl.classList.add('disabled');
+      prevEl.onclick = null;
+      nextEl.classList.add('disabled');
+      nextEl.onclick = null;
+      nextBtn.style.display = 'none';
+      nextBtn.onclick = null;
+      nextChapter = null;
       if (idx > 0) {{
-        prevEl.href = `/read/${{sorted[idx - 1].chapter}}`;
+        const prev = sorted[idx - 1].chapter;
+        prevEl.href = `/read/${{prev}}`;
         prevEl.classList.remove('disabled');
-        prevEl.addEventListener('click', markNavFs);
+        prevEl.onclick = (e) => {{ e.preventDefault(); loadChapter(prev); }};
       }}
       if (idx >= 0 && idx < sorted.length - 1) {{
-        const u = `/read/${{sorted[idx + 1].chapter}}`;
+        nextChapter = sorted[idx + 1].chapter;
+        const u = `/read/${{nextChapter}}`;
         nextEl.href = u;
         nextEl.classList.remove('disabled');
-        nextEl.addEventListener('click', markNavFs);
+        nextEl.onclick = (e) => {{ e.preventDefault(); loadChapter(nextChapter); }};
         nextBtn.href = u;
         nextBtn.style.display = 'inline-block';
-        nextBtn.addEventListener('click', markNavFs);
+        nextBtn.onclick = (e) => {{ e.preventDefault(); loadChapter(nextChapter); }};
+      }}
+    }}
+
+    async function loadChapter(ch) {{
+      currentChapter = ch;
+      if (pdfDoc) {{ pdfDoc.destroy(); pdfDoc = null; }}
+      currentPage = 1; totalPages = 0; preCache = null; rendering = false;
+      clearTimeout(overTimer);
+      resetZoom();
+      document.getElementById('end-screen').classList.remove('show');
+      document.getElementById('page-canvas').style.display = 'none';
+      document.getElementById('page-canvas-over').style.display = 'none';
+      const loadingEl = document.getElementById('loading');
+      loadingEl.textContent = 'Loading…';
+      loadingEl.style.display = 'flex';
+      history.pushState(null, '', `/read/${{ch}}`);
+      try {{
+        const data = await fetch('/api/chapters').then(r => r.json());
+        const meta = data.find(c => c.chapter === ch);
+        const title = (meta && meta.title) || `One Piece Chapter ${{ch}}`;
+        document.getElementById('ch-title').textContent = title;
+        document.title = title;
+        document.getElementById('dl-btn').href = `/pdf/${{ch}}?dl=1`;
+        updateNav(data, ch);
+        pdfDoc = await pdfjsLib.getDocument(`/pdf/${{ch}}`).promise;
+        totalPages = pdfDoc.numPages;
+        loadingEl.style.display = 'none';
+        document.getElementById('page-canvas').style.display = 'block';
+        await renderPage(1);
+      }} catch(e) {{
+        loadingEl.textContent = 'Failed to load chapter.';
       }}
     }}
 
@@ -278,9 +320,8 @@ def read(chapter: int):
       document.getElementById('ch-title').textContent = TITLE;
       try {{
         const data = await fetch('/api/chapters').then(r => r.json());
-        updateNav(data);
+        updateNav(data, CHAPTER);
       }} catch(e) {{}}
-
       try {{
         pdfDoc = await pdfjsLib.getDocument(PDF_URL).promise;
         totalPages = pdfDoc.numPages;
@@ -394,8 +435,7 @@ def read(chapter: int):
     function goNext() {{
       const endScreen = document.getElementById('end-screen');
       if (endScreen.classList.contains('show')) {{
-        const btn = document.getElementById('next-ch-btn');
-        if (btn.style.display !== 'none') {{ markNavFs(); location.href = btn.href; }}
+        if (nextChapter !== null) loadChapter(nextChapter);
       }} else if (currentPage < totalPages) {{
         renderPage(currentPage + 1);
       }} else {{
@@ -448,25 +488,6 @@ def read(chapter: int):
       else {{ document.documentElement.requestFullscreen().catch(() => {{}}); }}
     }});
     document.addEventListener('fullscreenchange', updateFsBtn);
-
-    // Persist fullscreen across chapter navigations
-    function markNavFs() {{
-      if (document.fullscreenElement) sessionStorage.setItem('resume_fs', '1');
-    }}
-    if (sessionStorage.getItem('resume_fs')) {{
-      sessionStorage.removeItem('resume_fs');
-      document.documentElement.requestFullscreen().catch(() => {{
-        // Fallback: re-enter on first user interaction (click or keydown)
-        const enterFsOnce = (e) => {{
-          if (e.target.id === 'fs-btn') return;
-          document.documentElement.requestFullscreen().catch(() => {{}});
-          document.removeEventListener('click', enterFsOnce, true);
-          document.removeEventListener('keydown', enterFsOnce, true);
-        }};
-        document.addEventListener('click', enterFsOnce, true);
-        document.addEventListener('keydown', enterFsOnce, true);
-      }});
-    }}
 
     // Zoom + pan
     (function() {{
