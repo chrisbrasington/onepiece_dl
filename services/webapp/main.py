@@ -337,6 +337,7 @@ def read(chapter: int):
     async function renderPage(n, fade) {{
       if (rendering || !pdfDoc) return;
       rendering = true;
+      ++preCacheSeq;
       clearTimeout(overTimer);
       const over = document.getElementById('page-canvas-over');
       over.style.display = 'none';
