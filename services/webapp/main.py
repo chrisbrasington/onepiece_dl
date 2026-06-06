@@ -188,6 +188,8 @@ def read(chapter: int):
             color:#ffd23f; font-size:10px; font-family:monospace; padding:6px 8px;
             border-radius:6px; pointer-events:none; z-index:30; white-space:pre;
             line-height:1.5; }}*/
+    :fullscreen .bar {{ display: none; }}
+    :-webkit-full-screen .bar {{ display: none; }}
   </style>
 </head>
 <body>
@@ -224,6 +226,29 @@ def read(chapter: int):
 
     let pdfDoc = null, currentPage = 1, totalPages = 0, rendering = false, overTimer = null;
     let preCache = null;
+    let pageRotation = parseInt(sessionStorage.getItem('page_rotation') || '0');
+    let zoomLevel = 1, panX = 0, panY = 0;
+    const MAX_ZOOM = 3;
+
+    function clampPan() {{
+      const c = document.getElementById('page-canvas');
+      const v = document.getElementById('viewer');
+      const maxPx = Math.max(0, (c.offsetWidth * zoomLevel - v.clientWidth) / 2);
+      const maxPy = Math.max(0, (c.offsetHeight * zoomLevel - v.clientHeight) / 2);
+      panX = Math.max(-maxPx, Math.min(maxPx, panX));
+      panY = Math.max(-maxPy, Math.min(maxPy, panY));
+    }}
+    function applyZoom() {{
+      const c = document.getElementById('page-canvas');
+      clampPan();
+      c.style.transform = zoomLevel === 1
+        ? ''
+        : `scale(${{zoomLevel}}) translate(${{panX / zoomLevel}}px, ${{panY / zoomLevel}}px)`;
+    }}
+    function resetZoom() {{
+      zoomLevel = 1; panX = 0; panY = 0;
+      document.getElementById('page-canvas').style.transform = '';
+    }}
 
     function updateNav(chapters) {{
       const sorted = chapters.slice().sort((a, b) => a.chapter - b.chapter);
@@ -275,7 +300,8 @@ def read(chapter: int):
       try {{
         const canvas = document.getElementById('page-canvas');
         // Fast path: use pre-rendered cache (eliminates the blank-canvas flash)
-        if (!fade && preCache && preCache.page === n) {{
+        if (!fade && preCache && preCache.page === n && preCache.rotation === pageRotation) {{
+          if (n !== currentPage) resetZoom();
           const cached = preCache;
           preCache = null;
           canvas.width = cached.canvas.width;
@@ -290,15 +316,16 @@ def read(chapter: int):
           preRenderNext(n + 1);
           return;
         }}
+        if (n !== currentPage) resetZoom();
         const page = await pdfDoc.getPage(n);
-        const vp0 = page.getViewport({{scale: 1}});
+        const vp0 = page.getViewport({{scale: 1, rotation: pageRotation}});
         const viewer = document.getElementById('viewer');
         // Cap DPR at 2 — multiplying zoom into DPR makes canvases enormous on tablets
         // and causes OOM crashes in Firefox Mobile when pinch-zooming.
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const fitScale = Math.min(viewer.clientHeight / vp0.height, viewer.clientWidth / vp0.width);
         const scale = fitScale * dpr;
-        const vp = page.getViewport({{scale}});
+        const vp = page.getViewport({{scale, rotation: pageRotation}});
         const cssW = Math.round(vp.width / dpr) + 'px';
         const cssH = Math.round(vp.height / dpr) + 'px';
         if (fade) {{
@@ -349,22 +376,29 @@ def read(chapter: int):
       preCache = null;
       try {{
         const page = await pdfDoc.getPage(n);
-        const vp0 = page.getViewport({{scale: 1}});
+        const vp0 = page.getViewport({{scale: 1, rotation: pageRotation}});
         const viewer = document.getElementById('viewer');
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const fitScale = Math.min(viewer.clientHeight / vp0.height, viewer.clientWidth / vp0.width);
-        const vp = page.getViewport({{scale: fitScale * dpr}});
+        const vp = page.getViewport({{scale: fitScale * dpr, rotation: pageRotation}});
         const tmp = document.createElement('canvas');
         tmp.width = Math.round(vp.width);
         tmp.height = Math.round(vp.height);
         await page.render({{canvasContext: tmp.getContext('2d'), viewport: vp}}).promise;
-        preCache = {{page: n, canvas: tmp, dpr}};
+        preCache = {{page: n, canvas: tmp, dpr, rotation: pageRotation}};
       }} catch(e) {{}}
     }}
 
     function goNext() {{
-      if (currentPage < totalPages) {{ renderPage(currentPage + 1); }}
-      else {{ document.getElementById('end-screen').classList.add('show'); }}
+      const endScreen = document.getElementById('end-screen');
+      if (endScreen.classList.contains('show')) {{
+        const btn = document.getElementById('next-ch-btn');
+        if (btn.style.display !== 'none') {{ markNavFs(); location.href = btn.href; }}
+      }} else if (currentPage < totalPages) {{
+        renderPage(currentPage + 1);
+      }} else {{
+        endScreen.classList.add('show');
+      }}
     }}
     function goPrev() {{
       if (document.getElementById('end-screen').classList.contains('show')) {{
@@ -380,6 +414,21 @@ def read(chapter: int):
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goNext();
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPrev();
       if (e.key === 'f' || e.key === 'F') document.getElementById('fs-btn').click();
+      if (e.key === 'r') {{
+        pageRotation = (pageRotation + 270) % 360;
+        sessionStorage.setItem('page_rotation', pageRotation);
+        preCache = null;
+        renderPage(currentPage);
+      }}
+      if (e.key === 'R') {{
+        pageRotation = (pageRotation + 90) % 360;
+        sessionStorage.setItem('page_rotation', pageRotation);
+        preCache = null;
+        renderPage(currentPage);
+      }}
+      if (e.key === '+' || e.key === '=') {{ zoomLevel = Math.min(MAX_ZOOM, parseFloat((zoomLevel + 0.5).toFixed(1))); applyZoom(); }}
+      if (e.key === '-' || e.key === '_') {{ zoomLevel = Math.max(1, parseFloat((zoomLevel - 0.5).toFixed(1))); applyZoom(); }}
+      if (e.key === '0') resetZoom();
     }});
 
     // Fullscreen toggle
@@ -412,6 +461,39 @@ def read(chapter: int):
       }};
       document.addEventListener('click', enterFsOnce, true);
     }}
+
+    // Zoom + pan
+    (function() {{
+      const viewer = document.getElementById('viewer');
+      // Pinch to zoom
+      let _pd = null;
+      viewer.addEventListener('touchstart', e => {{ if (e.touches.length === 2) _pd = null; }}, {{passive: true}});
+      viewer.addEventListener('touchmove', e => {{
+        if (e.touches.length !== 2) return;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (_pd !== null) {{ zoomLevel = Math.max(1, Math.min(MAX_ZOOM, zoomLevel * dist / _pd)); applyZoom(); }}
+        _pd = dist;
+        e.preventDefault();
+      }}, {{passive: false}});
+      viewer.addEventListener('touchend', e => {{ if (e.touches.length < 2) _pd = null; }}, {{passive: true}});
+      // Drag to pan when zoomed
+      let _drag = null, _sc = false;
+      viewer.addEventListener('click', e => {{ if (_sc) {{ e.stopPropagation(); _sc = false; }} }}, true);
+      viewer.addEventListener('pointerdown', e => {{
+        if (e.isPrimary && zoomLevel > 1)
+          _drag = {{x: e.clientX, y: e.clientY, px0: panX, py0: panY, moved: false}};
+      }});
+      viewer.addEventListener('pointermove', e => {{
+        if (!_drag || !e.isPrimary) return;
+        const dx = e.clientX - _drag.x, dy = e.clientY - _drag.y;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) _drag.moved = true;
+        if (_drag.moved) {{ panX = _drag.px0 + dx; panY = _drag.py0 + dy; applyZoom(); }}
+      }});
+      viewer.addEventListener('pointerup', () => {{ if (_drag && _drag.moved) _sc = true; _drag = null; }});
+      viewer.addEventListener('pointercancel', () => {{ _drag = null; }});
+    }})();
 
     if (window.visualViewport) {{
       let _zt = null;
