@@ -71,6 +71,8 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
 | `CALIBRE_UPLOAD_FIELD` | calibre | upload form field name if your CW version differs (default `btn-upload`) |
 | `CALIBRE_AUTHOR` / `CALIBRE_SERIES` / `CALIBRE_TAGS` | calibre | metadata defaults |
 | `STORAGE_PATH` | compose | host dir bind-mounted to `/data` (default `./data`); where PDFs + `last_chapter.txt` live on the host |
+| `BACKUP_PATH` | downloader | optional backup dir (e.g. `/mnt/NAS/manga/One Piece`). After new chapters download, the PDFs are `rsync`'d here (new/changed only, never deletes). Bind-mounted into the downloader at the same path. Unset = no backup. |
+| `BACKUP_TIMEOUT` | downloader | max seconds for one backup rsync (default 1800) |
 | `ONEPIECE_STORAGE` | all | storage root *inside* the container (set to `/data`; don't change) |
 | `WEBAPP_PORT` | webapp | container listen port (default 8080) |
 

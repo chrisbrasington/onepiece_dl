@@ -19,6 +19,15 @@ services:
       ONEPIECE_STORAGE: /data
     volumes:
       - ${STORAGE_PATH:-./data}:/data
+      # Optional backup target. Mounted at the SAME path inside the container so
+      # BACKUP_PATH means the same thing in .env and to rsync. When BACKUP_PATH
+      # is unset, this binds a throwaway dir to itself (harmless) and the
+      # downloader skips the sync because BACKUP_PATH isn't in its environment.
+      - type: bind
+        source: ${BACKUP_PATH:-/var/tmp/onepiece-backup-disabled}
+        target: ${BACKUP_PATH:-/var/tmp/onepiece-backup-disabled}
+        bind:
+          create_host_path: true
     labels:
       - homepage.group=One Piece
       - homepage.name=Downloader
@@ -102,7 +111,7 @@ services:
       - homepage.href=https://onepiece.home.chrisincode.com
       - homepage.description=Browse, read & download chapters
       - homepage.widget.type=customapi
-      - homepage.widget.url=http://one-piece-webapp:8080/api/stats
+      - homepage.widget.url=https://onepiece.home.chrisincode.com/api/stats
       - homepage.widget.refreshInterval=60000
       - homepage.widget.mappings[0].label=Last Chapter
       - homepage.widget.mappings[0].field=last_chapter

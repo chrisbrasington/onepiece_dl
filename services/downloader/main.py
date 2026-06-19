@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from onepiece.storage import Storage, Reconciler
 from onepiece.downloader import MangaDownloader
+from onepiece.backup import sync_to_backup
 from onepiece.release_schedule import (
     ScheduleConfig,
     next_check_delay,
@@ -49,8 +50,11 @@ def serve_requests(storage, downloader):
     are left in the queue to retry on a later pass.
 
     By default a queued (webapp) request does NOT trigger a Discord post — it's
-    treated as a backfill. Set WEBAPP_REQUEST_POST=1 to let the bot post them."""
+    treated as a backfill. Set WEBAPP_REQUEST_POST=1 to let the bot post them.
+
+    Returns how many chapters were freshly downloaded."""
     post_requested = bool(os.environ.get("WEBAPP_REQUEST_POST"))
+    fetched = 0
     for ch in storage.pending_requests():
         if storage.has_chapter(ch):
             storage.clear_request(ch)
@@ -68,9 +72,11 @@ def serve_requests(storage, downloader):
         if pdf:
             downloader.save_last_chapter(ch)
             storage.clear_request(ch)
+            fetched += 1
             print(f"[request] chapter {ch} done")
         else:
             print(f"[request] chapter {ch} not available yet; will retry")
+    return fetched
 
 
 def check_new(storage, downloader, max_catchup):
@@ -134,8 +140,12 @@ def wait_with_reactivity(storage, delay, chunk=60.0):
 
 
 def run_pass(storage, downloader, max_catchup):
-    serve_requests(storage, downloader)
-    check_new(storage, downloader, max_catchup)
+    fetched = serve_requests(storage, downloader)
+    fetched += check_new(storage, downloader, max_catchup)
+    # Mirror new PDFs to the backup dir (NAS, etc.). No-op when BACKUP_PATH is
+    # unset; never fatal if the backup target is unavailable.
+    if fetched:
+        sync_to_backup(storage)
     # Heartbeat: record that we polled, so consumers (e.g. the Homepage widget)
     # can show when the downloader last looked for chapters.
     storage.save_last_check()
