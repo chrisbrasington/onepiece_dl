@@ -45,6 +45,7 @@ def chapters_payload(store):
             "pages": meta.get("pages"),
             "downloaded_at": meta.get("downloaded_at"),
             "has_preview": os.path.exists(store.preview_path(ch)),
+            "has_cbz": store.has_cbz(ch),
         })
     return out
 
@@ -99,6 +100,23 @@ def api_cancel_request(chapter: int):
     return {"status": "cancelled", "chapter": chapter}
 
 
+@app.post("/api/cbz/{chapter}")
+def api_make_cbz(chapter: int):
+    """Build a CBZ for a chapter that only has a PDF on disk, rebuilding it from
+    the PDF pages. Idempotent: returns 'present' if one already exists. New
+    downloads get a CBZ automatically; this backfills older chapters."""
+    if storage.has_cbz(chapter):
+        return {"status": "present", "chapter": chapter}
+    if not os.path.exists(storage.pdf_path(chapter)):
+        raise HTTPException(status_code=404, detail="no pdf")
+    from onepiece.cbz import pdf_to_cbz
+    try:
+        pdf_to_cbz(storage.pdf_path(chapter), storage.cbz_path(chapter))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"cbz build failed: {e}")
+    return {"status": "created", "chapter": chapter}
+
+
 # --- files -----------------------------------------------------------------
 @app.get("/preview/{chapter}")
 def preview(chapter: int):
@@ -119,6 +137,19 @@ def pdf(chapter: int, dl: int = 0):
         path,
         media_type="application/pdf",
         headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+    )
+
+
+@app.get("/cbz/{chapter}")
+def cbz(chapter: int):
+    path = storage.cbz_path(chapter)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="no cbz")
+    filename = os.path.basename(path)
+    return FileResponse(
+        path,
+        media_type="application/vnd.comicbook+zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

@@ -13,9 +13,9 @@ what's on disk and react to new chapters.
 
 ```
             downloader  ──writes──▶  shared volume (/data)
-          (checks for new            pdfs/  discord_pdfs/  previews/
+          (checks for new            pdfs/  cbz/  discord_pdfs/  previews/
            chapters, builds          meta/  requests/  work/  last_chapter.txt
-           pdf+preview+meta)               │
+           pdf+cbz+preview+meta)           │
                                   ┌─────────┼──────────┐
                                   ▼         ▼          ▼
                                  bot     calibre     webapp
@@ -35,7 +35,7 @@ marker in `requests/`, which the downloader fulfills.
 | `downloader`     | Polls for new chapters (adaptive schedule), fulfills webapp requests, writes pdf/preview/metadata. |
 | `bot`            | Discord bot. Auto-posts new chapters to a channel; `/check`, `/chapter`, `/url`, `/napier`, `/delete` (admin) commands. |
 | `calibre-uploader` | Uploads chapter PDFs to Calibre-Web over HTTP; backfills what's missing on startup. |
-| `webapp`         | Cover grid, in-browser reader, PDF download, request-missing-chapter. |
+| `webapp`         | Cover grid, in-browser reader, PDF/CBZ download, build-missing-CBZ, request-missing-chapter. |
 
 ### Release schedule (heuristic)
 
@@ -71,7 +71,7 @@ Copy `.env.example` to `.env` and fill it in. `.env` is gitignored; never commit
 | `CALIBRE_UPLOAD_FIELD` | calibre | upload form field name if your CW version differs (default `btn-upload`) |
 | `CALIBRE_AUTHOR` / `CALIBRE_SERIES` / `CALIBRE_TAGS` | calibre | metadata defaults |
 | `STORAGE_PATH` | compose | host dir bind-mounted to `/data` (default `./data`); where PDFs + `last_chapter.txt` live on the host |
-| `BACKUP_PATH` | downloader | optional backup dir (e.g. `/mnt/NAS/manga/One Piece`). After new chapters download, the PDFs are `rsync`'d here (new/changed only, never deletes). Bind-mounted into the downloader at the same path. Unset = no backup. |
+| `BACKUP_PATH` | downloader | optional backup dir (e.g. `/mnt/NAS/manga/One Piece`). After new chapters download, the CBZ files are `rsync`'d here (new/changed only, never deletes). Bind-mounted into the downloader at the same path. Unset = no backup. |
 | `BACKUP_TIMEOUT` | downloader | max seconds for one backup rsync (default 1800) |
 | `ONEPIECE_STORAGE` | all | storage root *inside* the container (set to `/data`; don't change) |
 | `WEBAPP_PORT` | webapp | container listen port (default 8080) |
@@ -174,6 +174,16 @@ the webapp only ever use it, and it's never modified. If it exceeds the Discord
 limit, the downloader builds a compressed copy in `discord_pdfs/`; the bot posts
 the full one when it fits and the compressed one otherwise, then deletes the
 compressed copy after a successful post.
+
+## CBZ handling
+
+Each chapter also gets a CBZ (`cbz/one piece - N.cbz`) — a ZIP of the page images,
+the standard comic-reader format. The downloader builds it alongside the PDF from
+the freshly-downloaded pages (best quality, no re-encode). For chapters downloaded
+before this existed, the webapp shows a **Make CBZ** button on the card; it rebuilds
+the CBZ from the chapter's PDF on demand (pulling each page's embedded image back
+out). Once present, the card offers a **CBZ** download link instead. Shared logic
+lives in `onepiece/cbz.py`.
 
 ## Other tools
 - `download.py [chapter]` — one-off CLI download into the storage layout.

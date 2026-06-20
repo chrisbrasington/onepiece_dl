@@ -51,6 +51,8 @@
   .actions a:hover{background:#1b1e26}
   .actions a+a{border-left:1px solid var(--line)}
   .actions a.dl{color:var(--muted)}
+  .actions a.make{color:var(--straw);cursor:pointer}
+  .actions a.make.busy{color:var(--muted);pointer-events:none}
   .empty{color:var(--muted);padding:2rem 1.2rem}
   .toast{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);
     background:#1b1e26;border:1px solid var(--line);color:var(--ink);
@@ -87,6 +89,9 @@ function card(c){
     ? `<a class="thumb" href="/read/${c.chapter}"><img src="/preview/${c.chapter}" alt="Ch ${c.chapter}" loading="lazy" decoding="async"></a>`
     : `<a class="thumb ph" href="/read/${c.chapter}">📖</a>`;
   const pages = c.pages ? `${c.pages} pages` : '';
+  const cbz = c.has_cbz
+    ? `<a class="dl" href="/cbz/${c.chapter}">CBZ</a>`
+    : `<a class="make" onclick="makeCbz(${c.chapter}, this)">Make CBZ</a>`;
   return `<div class="card">
     ${thumb}
     <div class="meta">
@@ -96,9 +101,31 @@ function card(c){
     </div>
     <div class="actions">
       <a href="/read/${c.chapter}">Read</a>
-      <a class="dl" href="/pdf/${c.chapter}?dl=1">Download</a>
+      <a class="dl" href="/pdf/${c.chapter}?dl=1">PDF</a>
+      ${cbz}
     </div>
   </div>`;
+}
+
+async function makeCbz(n, el){
+  el.classList.add('busy');
+  el.textContent = 'Building…';
+  try{
+    const res = await fetch(`/api/cbz/${n}`, {method:'POST'});
+    if(res.ok){
+      const r = await res.json();
+      toast(r.status === 'present' ? `CBZ for ${n} already exists` : `Built CBZ for chapter ${n}`);
+      loadChapters();
+    } else {
+      toast('CBZ build failed');
+      el.classList.remove('busy');
+      el.textContent = 'Make CBZ';
+    }
+  } catch(e) {
+    toast('CBZ build failed');
+    el.classList.remove('busy');
+    el.textContent = 'Make CBZ';
+  }
 }
 
 function escapeHtml(s){

@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import re
 
 from .storage import Storage
+from .cbz import images_to_cbz
 
 # Patterns that mark an acceptable image, matched against the WHOLE URL (host or
 # path) — e.g. "wp-content"/"cdn" are path markers, not hosts. Junk patterns are
@@ -129,6 +130,11 @@ class MangaDownloader:
         preview_path = self.storage.preview_path(chapter)
         self.images_to_pdf(images_on_disk, output_pdf, preview_image=preview_path)
 
+        # Build a CBZ alongside the PDF, straight from the freshly-downloaded
+        # pages (best quality — no PDF round-trip). Done before delete_images().
+        output_cbz = self.storage.cbz_path(chapter)
+        images_to_cbz(images_on_disk, output_cbz)
+
         # Build a Discord-sized copy now, while the source pages still exist, so
         # the bot can post chapters whose full PDF exceeds Discord's upload limit.
         # The full PDF is never altered — calibre and the webapp always use it.
@@ -140,6 +146,7 @@ class MangaDownloader:
             source_url=url,
             pages=len(images_on_disk),
             pdf=os.path.basename(output_pdf),
+            cbz=os.path.basename(output_cbz),
             discord_pdf=(os.path.basename(discord_copy) if discord_copy else None),
         )
 

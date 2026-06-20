@@ -1,8 +1,9 @@
-"""Optional backup sync for chapter PDFs.
+"""Optional backup sync for chapter CBZ files.
 
-After the downloader fetches new chapters it can mirror the PDFs to a backup
-directory (e.g. a NAS share). The destination comes from the ``BACKUP_PATH``
-environment variable; if it's unset or empty, syncing is skipped entirely.
+After the downloader fetches new chapters it can mirror the CBZ archives to a
+backup directory (e.g. a NAS share). The destination comes from the
+``BACKUP_PATH`` environment variable; if it's unset or empty, syncing is skipped
+entirely.
 
 Kept stdlib-only (it shells out to rsync) so it doesn't drag extra deps into
 storage-only consumers.
@@ -20,14 +21,14 @@ def backup_path():
 
 
 def sync_to_backup(storage, dest=None):
-    """Mirror the chapter PDFs to the backup directory with rsync.
+    """Mirror the chapter CBZ files to the backup directory with rsync.
 
     Returns True if a sync ran (and succeeded), False if skipped or failed.
     Never raises — a backup problem must not take the downloader down.
 
-    Uses ``rsync -a`` without ``--delete``: new and changed PDFs are copied,
+    Uses ``rsync -a`` without ``--delete``: new and changed CBZ files are copied,
     nothing in the backup is ever removed. The trailing slash on the source
-    copies the directory's *contents* into dest, not a nested ``pdfs`` folder.
+    copies the directory's *contents* into dest, not a nested ``cbz`` folder.
     """
     dest = dest or backup_path()
     if not dest:
@@ -38,7 +39,7 @@ def sync_to_backup(storage, dest=None):
         print("[backup] rsync not found on PATH; skipping backup sync")
         return False
 
-    src = storage.pdf_dir.rstrip("/") + "/"
+    src = storage.cbz_dir.rstrip("/") + "/"
     try:
         os.makedirs(dest, exist_ok=True)
     except OSError as e:

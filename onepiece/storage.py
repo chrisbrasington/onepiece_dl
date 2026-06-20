@@ -6,6 +6,7 @@ calibre uploader, and webapp are readers that reconcile against what's present.
 
 Layout under the root:
     pdfs/      one piece - <chapter>.pdf      (final chapter PDFs)
+    cbz/       one piece - <chapter>.cbz      (comic-archive copies)
     previews/  <chapter>.png                  (first-page cover thumbnails)
     meta/      <chapter>.json                 (chapter metadata sidecars)
     requests/  <chapter>.request              (webapp -> downloader queue)
@@ -24,8 +25,9 @@ from datetime import date, datetime, timezone
 
 DEFAULT_ROOT = "storage"
 
-# Chapter PDFs are named "one piece - <chapter>.pdf".
+# Chapter PDFs are named "one piece - <chapter>.pdf"; CBZ copies mirror that name.
 _PDF_RE = re.compile(r"one piece - (\d+)\.pdf$", re.IGNORECASE)
+_CBZ_RE = re.compile(r"one piece - (\d+)\.cbz$", re.IGNORECASE)
 _REQUEST_RE = re.compile(r"(\d+)\.request$")
 
 
@@ -35,6 +37,7 @@ class Storage:
         # of import order.
         self.root = root or os.environ.get("ONEPIECE_STORAGE") or DEFAULT_ROOT
         self.pdf_dir = os.path.join(self.root, "pdfs")
+        self.cbz_dir = os.path.join(self.root, "cbz")
         self.discord_dir = os.path.join(self.root, "discord_pdfs")
         self.preview_dir = os.path.join(self.root, "previews")
         self.meta_dir = os.path.join(self.root, "meta")
@@ -42,13 +45,18 @@ class Storage:
         self.work_dir = os.path.join(self.root, "work")
         self.last_chapter_file = os.path.join(self.root, "last_chapter.txt")
         self.last_check_file = os.path.join(self.root, "last_check.txt")
-        for d in (self.pdf_dir, self.discord_dir, self.preview_dir, self.meta_dir,
-                  self.requests_dir, self.work_dir):
+        for d in (self.pdf_dir, self.cbz_dir, self.discord_dir, self.preview_dir,
+                  self.meta_dir, self.requests_dir, self.work_dir):
             os.makedirs(d, exist_ok=True)
 
     # ----- paths -----------------------------------------------------------
     def pdf_path(self, chapter):
         return os.path.join(self.pdf_dir, f"one piece - {chapter}.pdf")
+
+    def cbz_path(self, chapter):
+        """Comic-archive (CBZ) copy of a chapter. Built alongside the PDF on
+        download, or on demand by the webapp; mirrors the PDF's filename."""
+        return os.path.join(self.cbz_dir, f"one piece - {chapter}.cbz")
 
     def discord_pdf_path(self, chapter):
         """Optional size-reduced copy for Discord's upload limit. Only created by
@@ -70,6 +78,9 @@ class Storage:
     # ----- chapter inventory ----------------------------------------------
     def has_chapter(self, chapter):
         return os.path.exists(self.pdf_path(chapter))
+
+    def has_cbz(self, chapter):
+        return os.path.exists(self.cbz_path(chapter))
 
     def list_chapters(self):
         """Chapters with a PDF present, ascending."""
