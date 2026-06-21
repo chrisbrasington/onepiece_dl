@@ -145,19 +145,73 @@ class Storage:
     def _expected_file(self):
         return os.path.join(self.root, "expected_next.txt")
 
+    def _read_expected(self):
+        """Parse expected_next.txt into (aware-UTC datetime, tz_name|None), or None.
+
+        Accepts three on-disk forms, newest first:
+          - JSON {"at": "<iso-with-offset>", "tz": "America/Denver"}  (webapp)
+          - a bare ISO datetime (with or without offset; naive -> UTC)
+          - a bare YYYY-MM-DD date (legacy opctl) -> midnight UTC
+        Kept stdlib-only: the stored offset is enough; no ZoneInfo needed here."""
+        if not os.path.exists(self._expected_file):
+            return None
+        try:
+            raw = open(self._expected_file).read().strip()
+        except OSError:
+            return None
+        if not raw:
+            return None
+        tz_name = None
+        at = raw
+        if raw.startswith("{"):
+            try:
+                obj = json.loads(raw)
+                at = obj.get("at") or ""
+                tz_name = obj.get("tz")
+            except (ValueError, AttributeError):
+                return None
+        try:
+            dt = datetime.fromisoformat(at)
+        except ValueError:
+            try:
+                d = date.fromisoformat(at)
+            except ValueError:
+                return None
+            dt = datetime(d.year, d.month, d.day)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc), tz_name
+
+    def get_expected_release_dt(self):
+        """Manually-set expected next release as an aware UTC datetime, or None.
+        Overrides the heuristic so the downloader polls around a known instant."""
+        parsed = self._read_expected()
+        return parsed[0] if parsed else None
+
+    def get_expected_schedule(self):
+        """Display view of the manual override: {"dt": <aware utc>, "tz": <name|None>}
+        or None. The tz name (when set via the webapp) lets callers render the
+        original local time."""
+        parsed = self._read_expected()
+        if not parsed:
+            return None
+        return {"dt": parsed[0], "tz": parsed[1]}
+
     def get_expected_release(self):
         """Manually-set expected next release date (a datetime.date), or None.
-        Overrides the heuristic so the downloader polls around a known date."""
-        if os.path.exists(self._expected_file):
-            try:
-                return date.fromisoformat(open(self._expected_file).read().strip())
-            except (ValueError, OSError):
-                return None
-        return None
+        Date-granularity view kept for the opctl CLI display."""
+        dt = self.get_expected_release_dt()
+        return dt.date() if dt else None
 
-    def set_expected_release(self, d):
+    def set_expected_release(self, value, tz_name=None):
+        """Persist a manual override. ``value`` is a date or an aware datetime.
+        When ``tz_name`` is given, store JSON so the zone label survives for
+        display; otherwise store the bare ISO string."""
         with open(self._expected_file, "w") as f:
-            f.write(d.isoformat())
+            if tz_name:
+                f.write(json.dumps({"at": value.isoformat(), "tz": tz_name}))
+            else:
+                f.write(value.isoformat())
 
     def clear_expected_release(self):
         if os.path.exists(self._expected_file):

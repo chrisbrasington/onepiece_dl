@@ -13,12 +13,15 @@ Env:
 
 import json
 import os
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.staticfiles import StaticFiles
 
 from onepiece.storage import Storage
+from onepiece.release_schedule import expected_next_release
 
 try:
     from dotenv import load_dotenv
@@ -58,6 +61,59 @@ def enqueue_request(store, chapter):
         return {"status": "present", "chapter": chapter}
     store.request_chapter(chapter)
     return {"status": "requested", "chapter": chapter}
+
+
+# Curated IANA zones offered by the schedule picker. Order = dropdown order;
+# the first entry (Mountain/Denver) is the default. DST is handled by ZoneInfo.
+SCHEDULE_ZONES = [
+    {"id": "America/Denver", "label": "Mountain (Denver)"},
+    {"id": "America/Los_Angeles", "label": "Pacific (Los Angeles)"},
+    {"id": "America/Chicago", "label": "Central (Chicago)"},
+    {"id": "America/New_York", "label": "Eastern (New York)"},
+    {"id": "UTC", "label": "UTC"},
+]
+
+
+def latest_release_dt(store):
+    """When we fetched the newest chapter we have (aware UTC), or None — the basis
+    for the auto heuristic, mirroring the downloader's latest_release_time."""
+    chapters = store.list_chapters()
+    if not chapters:
+        return None
+    meta = store.read_meta(max(chapters)) or {}
+    stamp = meta.get("downloaded_at")
+    if not stamp:
+        return None
+    try:
+        return datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+
+
+def schedule_payload(store):
+    """Current next-release estimate: a user-set instant ('manual') or the weekly
+    auto-guess ('auto'). Drives the dashboard schedule panel."""
+    sched = store.get_expected_schedule()
+    if sched:
+        dt = sched["dt"]
+        tz_name = sched["tz"]
+        try:
+            local = dt.astimezone(ZoneInfo(tz_name)) if tz_name else dt
+        except ZoneInfoNotFoundError:
+            local = dt
+        return {
+            "mode": "manual",
+            "at": dt.isoformat(),
+            "tz": tz_name,
+            "display": local.strftime("%a, %b %d %Y, %I:%M %p %Z").replace(" 0", " "),
+            "local_date": local.date().isoformat(),
+            "hour": local.hour,
+        }
+    expected = expected_next_release(latest_release_dt(store))
+    return {
+        "mode": "auto",
+        "expected": expected.date().isoformat() if expected else None,
+    }
 
 
 # --- API -------------------------------------------------------------------
@@ -115,6 +171,52 @@ def api_make_cbz(chapter: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"cbz build failed: {e}")
     return {"status": "created", "chapter": chapter}
+
+
+@app.get("/api/schedule")
+def api_schedule():
+    """Next-release estimate: user-set ('manual') or weekly auto-guess ('auto')."""
+    return {"zones": SCHEDULE_ZONES, **schedule_payload(storage)}
+
+
+@app.post("/api/schedule")
+def api_set_schedule(payload: dict = Body(...)):
+    """Set the expected next release from a date, optional hour (0-23, default 0),
+    and IANA timezone. The local time is converted to UTC and stored; the
+    downloader idles until then, polls hourly, and reverts to the heuristic once a
+    chapter lands."""
+    try:
+        d = date.fromisoformat(str(payload.get("date", "")))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid date; use YYYY-MM-DD")
+
+    hour = payload.get("hour")
+    try:
+        hour = 0 if hour in (None, "") else int(hour)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="invalid hour")
+    if not 0 <= hour <= 23:
+        raise HTTPException(status_code=400, detail="hour must be 0-23")
+
+    tz_name = payload.get("tz") or "America/Denver"
+    try:
+        tz = ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(status_code=400, detail=f"unknown timezone '{tz_name}'")
+
+    local = datetime(d.year, d.month, d.day, hour, tzinfo=tz)
+    if local < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="that time is in the past")
+
+    storage.set_expected_release(local, tz_name=tz_name)
+    return {"zones": SCHEDULE_ZONES, **schedule_payload(storage)}
+
+
+@app.delete("/api/schedule")
+def api_clear_schedule():
+    """Drop the manual override and revert to the weekly auto-guess."""
+    storage.clear_expected_release()
+    return {"zones": SCHEDULE_ZONES, **schedule_payload(storage)}
 
 
 # --- files -----------------------------------------------------------------

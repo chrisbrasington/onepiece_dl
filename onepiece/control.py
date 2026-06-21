@@ -189,9 +189,11 @@ def main(argv=None):
         "schedule",
         help="set/show/clear the expected next release date",
         description="Set the date the next chapter is expected, as YYYY-MM-DD "
-                    "(e.g. 2026-06-07). The downloader idles until about a day "
-                    "before, then polls hourly until it lands, and reacts to the "
-                    "change within ~a minute. Past dates are rejected; a date more "
+                    "(e.g. 2026-06-07). The downloader idles until the set time "
+                    "(keeping a light daily check on the way), then polls hourly "
+                    "until it lands, and reacts to the change within ~a minute. "
+                    "For a specific hour/timezone, use the webapp. "
+                    "Past dates are rejected; a date more "
                     "than a month out warns. It clears automatically once a new "
                     "chapter is fetched. With no date it shows the current value; "
                     "--clear reverts to the automatic heuristic.",

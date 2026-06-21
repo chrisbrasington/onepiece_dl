@@ -58,6 +58,30 @@
     background:#1b1e26;border:1px solid var(--line);color:var(--ink);
     padding:.6rem 1rem;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none}
   .toast.show{opacity:1}
+  .sched{margin:.7rem 1.2rem 0;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:.7rem .9rem;display:flex;flex-direction:column;gap:.6rem}
+  .sched-status{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;font-size:.9rem}
+  .sched-status .lbl{color:var(--muted)}
+  .sched-status .val{font-weight:600}
+  .badge{font-size:.68rem;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+    border-radius:999px;padding:.18rem .55rem}
+  .badge.auto{background:#1b2330;border:1px solid #2b3a4f;color:#7fb0e6}
+  .badge.manual{background:#241f10;border:1px solid #3a3115;color:var(--straw)}
+  .sched-edit{margin-left:auto;background:none;border:1px solid var(--line);color:var(--muted);
+    border-radius:8px;padding:.35rem .7rem;cursor:pointer;font-size:.82rem;font-weight:600}
+  .sched-edit:hover{color:var(--ink);border-color:#39414f}
+  .sched-form{display:none;flex-wrap:wrap;gap:.5rem;align-items:center;
+    border-top:1px solid var(--line);padding-top:.6rem}
+  .sched-form.open{display:flex}
+  .sched-form label{color:var(--muted);font-size:.78rem;display:flex;flex-direction:column;gap:.2rem}
+  .sched-form input,.sched-form select{background:#0e0f13;border:1px solid var(--line);
+    color:var(--ink);border-radius:8px;padding:.4rem .55rem;font-size:.9rem}
+  .sched-form input[type=number]{width:4.5rem}
+  .sched-form .set{background:var(--straw);color:#1a1a1a;border:0;border-radius:8px;
+    padding:.5rem .9rem;font-weight:600;cursor:pointer;align-self:flex-end}
+  .sched-form .clear{background:none;border:1px solid var(--line);color:var(--muted);
+    border-radius:8px;padding:.5rem .8rem;cursor:pointer;font-weight:600;align-self:flex-end}
+  .sched-form .clear:hover{color:var(--red);border-color:var(--red)}
 </style>
 </head>
 <body>
@@ -70,6 +94,27 @@
     </form>
   </header>
   <div id="pending"></div>
+  <section class="sched" id="sched" hidden>
+    <div class="sched-status">
+      <span class="lbl">Next chapter:</span>
+      <span id="schedBadge" class="badge"></span>
+      <span class="val" id="schedVal"></span>
+      <button class="sched-edit" id="schedEdit" type="button">Set date</button>
+    </div>
+    <form class="sched-form" id="schedForm">
+      <label>Date
+        <input id="schedDate" type="date" required>
+      </label>
+      <label>Hour (optional)
+        <input id="schedHour" type="number" min="0" max="23" placeholder="0–23">
+      </label>
+      <label>Timezone
+        <select id="schedTz"></select>
+      </label>
+      <button class="set" type="submit">Set</button>
+      <button class="clear" id="schedClear" type="button">Use auto-guess</button>
+    </form>
+  </section>
   <main id="grid"><div class="empty">Loading…</div></main>
   <div class="toast" id="toast"></div>
 
@@ -170,9 +215,83 @@ document.getElementById('reqForm').addEventListener('submit', async (e)=>{
   }
 });
 
+const schedEl = document.getElementById('sched');
+const schedBadge = document.getElementById('schedBadge');
+const schedVal = document.getElementById('schedVal');
+const schedForm = document.getElementById('schedForm');
+const schedTz = document.getElementById('schedTz');
+let tzInit = false;
+
+function fmtDate(iso){
+  // iso = YYYY-MM-DD; render without pulling in timezone shifts.
+  if(!iso) return 'unknown';
+  const [y,m,d] = iso.split('-').map(Number);
+  return new Date(y, m-1, d).toLocaleDateString(undefined,
+    {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+}
+
+async function loadSchedule(){
+  const res = await fetch('/api/schedule');
+  if(!res.ok) return;
+  const s = await res.json();
+  if(!tzInit && s.zones){
+    schedTz.innerHTML = s.zones.map(z=>`<option value="${z.id}">${escapeHtml(z.label)}</option>`).join('');
+    tzInit = true;
+  }
+  if(s.mode === 'manual'){
+    schedBadge.textContent = 'Set by you';
+    schedBadge.className = 'badge manual';
+    schedVal.textContent = s.display || s.at;
+    if(s.local_date) document.getElementById('schedDate').value = s.local_date;
+    if(s.tz) schedTz.value = s.tz;
+    if(typeof s.hour === 'number') document.getElementById('schedHour').value = s.hour;
+  } else {
+    schedBadge.textContent = 'Auto-guess';
+    schedBadge.className = 'badge auto';
+    schedVal.textContent = s.expected ? `next Sunday — ${fmtDate(s.expected)}` : 'unknown (no chapters yet)';
+  }
+  schedEl.hidden = false;
+}
+
+document.getElementById('schedEdit').addEventListener('click', ()=>{
+  schedForm.classList.toggle('open');
+});
+
+schedForm.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const date = document.getElementById('schedDate').value;
+  const hourRaw = document.getElementById('schedHour').value;
+  if(!date){ toast('Pick a date'); return; }
+  const body = {date, tz: schedTz.value};
+  if(hourRaw !== '') body.hour = parseInt(hourRaw, 10);
+  const res = await fetch('/api/schedule', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  if(res.ok){
+    schedForm.classList.remove('open');
+    toast('Release date set');
+    loadSchedule();
+  } else {
+    const err = await res.json().catch(()=>({}));
+    toast(err.detail ? `Failed: ${err.detail}` : 'Failed to set date');
+  }
+});
+
+document.getElementById('schedClear').addEventListener('click', async ()=>{
+  const res = await fetch('/api/schedule', {method:'DELETE'});
+  if(res.ok){
+    schedForm.classList.remove('open');
+    toast('Reverted to auto-guess');
+    loadSchedule();
+  } else {
+    toast('Failed to clear');
+  }
+});
+
 loadChapters();
 loadPending();
-setInterval(()=>{ loadChapters(); loadPending(); }, 30000);
+loadSchedule();
+setInterval(()=>{ loadChapters(); loadPending(); loadSchedule(); }, 30000);
 </script>
 </body>
 </html>

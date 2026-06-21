@@ -116,22 +116,20 @@ def check_new(storage, downloader, max_catchup):
 
 def expected_release_dt(storage):
     """The manual schedule override as an aware UTC datetime, or None."""
-    d = storage.get_expected_release()
-    if d is None:
-        return None
-    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+    return storage.get_expected_release_dt()
 
 
 def wait_with_reactivity(storage, delay, chunk=60.0):
     """Sleep up to `delay` seconds, but wake early if the schedule override or the
-    pending-request set changes, so the downloader reacts promptly to opctl."""
-    baseline_sched = storage.get_expected_release()
+    pending-request set changes, so the downloader reacts promptly to opctl/webapp.
+    Compares the full instant so a time-only edit (same date) still wakes us."""
+    baseline_sched = storage.get_expected_release_dt()
     baseline_reqs = storage.pending_requests()
     waited = 0.0
     while waited < delay:
         time.sleep(min(chunk, delay - waited))
         waited += chunk
-        if storage.get_expected_release() != baseline_sched:
+        if storage.get_expected_release_dt() != baseline_sched:
             print("[downloader] schedule changed; re-checking now")
             return
         if storage.pending_requests() != baseline_reqs:
@@ -174,7 +172,7 @@ def main():
         expected_dt = expected_release_dt(storage)
         delay = next_check_delay(now, last_rel, cfg, expected_release=expected_dt)
         if expected_dt:
-            exp_display = f"{expected_dt.date().isoformat()} (manual)"
+            exp_display = f"{expected_dt.isoformat()} (manual)"
         else:
             exp_display = expected_next_release(last_rel)
         print(f"[downloader] last_release={last_rel} expected_next~{exp_display} "
