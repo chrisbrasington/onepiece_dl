@@ -8,6 +8,7 @@ from PIL import Image
 
 from onepiece.storage import Storage, Reconciler
 from onepiece.downloader import MangaDownloader
+from onepiece.backup import sync_to_backup
 
 # Load .env if present (no-op if python-dotenv isn't installed or no .env exists)
 try:
@@ -371,6 +372,13 @@ async def handle_download(interaction: discord.Interaction, url: str, chapter: i
         # Mark so the auto-poster doesn't re-post a chapter we just shared.
         if chapter and bot.reconciler is not None:
             bot.reconciler.mark(chapter)
+
+        # Mirror the CBZ to the NAS backup dir, same as the downloader does after
+        # its own passes, so a bot-triggered chapter reaches the other manga
+        # webapp too. Only for real chapter downloads (which build a CBZ) — a
+        # raw /url grab doesn't. No-op if BACKUP_PATH is unset; never fatal.
+        if chapter:
+            sync_to_backup(bot.storage)
 
         print(f"Chapter {'from URL' if not chapter else chapter} uploaded successfully")
 

@@ -47,6 +47,14 @@ services:
       ONEPIECE_STORAGE: /data
     volumes:
       - ${STORAGE_PATH:-./data}:/data
+      # Same optional backup target as the downloader, mounted at the same path,
+      # so a chapter pulled via a Discord command also mirrors to the NAS for
+      # the other manga webapp. No-op when BACKUP_PATH is unset.
+      - type: bind
+        source: ${BACKUP_PATH:-/var/tmp/onepiece-backup-disabled}
+        target: ${BACKUP_PATH:-/var/tmp/onepiece-backup-disabled}
+        bind:
+          create_host_path: true
     depends_on:
       - downloader
     labels:
